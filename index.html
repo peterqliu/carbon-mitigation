@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Display a map on a webpage</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.js"></script>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+
+<style>
+	body { margin: 0; padding: 0; }
+	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+	#modal {
+		position:absolute;
+		left: 0px;
+		bottom: 0px;	
+		background:white;
+		padding:10px;
+		margin:10px;
+		border-radius:2px;
+	}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id='modal'>
+	Product
+	<div id='product'></div>
+	Scenario
+	<div id='scenario'></div>
+
+</div>
+<script>
+	mapboxgl.accessToken = 'pk.eyJ1IjoicGV0ZXJxbGl1IiwiYSI6ImNrbmdoM2d0cDBjeXAydnBjcTFvcDV4YWIifQ._dh1WoYUQQxa8qzjNXEPRQ';
+    var map = new mapboxgl.Map({
+        container: 'map', // container id
+        style: 'mapbox://styles/peterqliu/ck2gsk41605p71coi7wf6dope', // style URL
+        center: [-74.5, 40], // starting position [lng, lat]
+        zoom: 4 // starting zoom
+    });
+
+    var constants = {
+    	toggles: ['product', 'scenario'],
+    	products: ['Liquids', 'Gas'], 
+    	scenarios: ['SDS', 'SSP4', 'STPS']
+    }
+
+    var state = {
+    	product: 'Liquids',
+    	scenario: 'SDS'
+    }
+
+
+    constants.toggles.forEach(item=> {
+	    d3.select(`#${item}`)
+	    	.selectAll('button')
+	    	.data(constants[item+'s'])
+	    	.enter()
+	    	.append('button')
+	    	.text(d=>d)
+	    	.on('click', d=> {
+	    		state[item] = d;
+	    		updateVis()
+	    	})
+    })
+
+    const updateVis = () => {
+    	const prop = `${state.product}${state.scenario}`;
+		map.setPaintProperty(
+			'counties', 
+			'fill-opacity', 
+			{
+					property: prop,
+					stops: [
+						[0,0],
+						[1,1]
+					]
+			}
+		)
+
+		.setLayoutProperty(
+			'extrusions',
+			'text-size', 
+			{
+				property: prop,
+				stops: [
+					[{zoom: 0, value:0}, 0],
+					[{zoom: 0, value:1}, 2*state.pitchRatio],
+					[{zoom: 12, value:0}, 0],
+					[{zoom: 12, value:1}, 200*state.pitchRatio]
+				]
+			}
+		)
+    }
+    map.on('load', ()=> {
+    	d3.json('./data/boundGeoJSON.geojson', (e,r)=>{
+			data = r
+			map.addLayer({
+				id:'counties',
+				type: 'fill', 
+				source: {
+					type: 'geojson',
+					data: r
+				},
+				paint: {
+					'fill-color': 'green',
+					'fill-opacity': {
+						property: 'LiquidsSDS',
+						stops: [
+							[0,0],
+							[1,0.5]
+						]
+					}
+				}
+			}, 'water')
+			.addLayer({
+				id:'counties-outline',
+				type: 'line', 
+				source: 'counties',
+				paint: {
+					'line-color': 'green',
+				}
+			}, 'water')
+    	})
+
+    	d3.json('./data/points.geojson', (e,r)=>{
+			map.addLayer({
+				id:'extrusions',
+				type: 'symbol', 
+				source: {
+					type: 'geojson',
+					data: r
+				},
+				paint:{
+					'text-color':'blue'
+				},
+				layout: {
+                    'text-font':["Source Code Pro Medium","Arial Unicode MS Regular"],
+                    'text-field':'|',
+                    // 'text-letter-spacing':-2,
+                    // 'text-rotate':90,
+                    'text-anchor':'bottom',
+                    // 'text-max-width':40,
+                    // 'text-justify':'left',
+                    'text-offset':[0, 0.1],
+                    'text-allow-overlap': true,
+                    'text-size':{
+						property: 'LiquidsSDS',
+						stops: [
+							[0,0],
+							[1,80]
+						]
+					}
+				}
+			})
+			.addLayer({
+				id:'circle', 
+				type: 'circle', 
+				source:'extrusions',
+				paint: {
+					'circle-radius': 4
+				}
+			}, 'extrusions')
+			.on('pitch', ()=> {
+				var ratio = map.getPitch()/60
+				state.pitchRatio = ratio;
+				updateVis();		
+			})
+    	})
+    })
+</script>
+
+</body>
+</html>

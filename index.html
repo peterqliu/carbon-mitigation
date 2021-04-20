@@ -4,42 +4,53 @@
 <meta charset="utf-8">
 <title>Display a map on a webpage</title>
 <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
-<link href="https://api.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.css" rel="stylesheet">
-<script src="https://api.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.2.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.2.0/mapbox-gl.js"></script>
 <script src="https://d3js.org/d3.v4.min.js"></script>
 
 <style>
-	body { margin: 0; padding: 0; }
+	body { margin: 0; padding: 0; font-family:sans-serif;}
 	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
 	#modal {
 		position:absolute;
 		left: 0px;
 		bottom: 0px;	
 		background:white;
-		padding:10px;
+		padding:20px;
 		margin:10px;
-		border-radius:2px;
+		border-radius:5px;
+		min-width:10vw;
+	}
+
+	label {
+		margin-right:10px;
+	}
+	.mapboxgl-popup-content {
+		padding: 6px;
 	}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id='modal'>
-	Product
-	<div id='product'></div>
-	Scenario
+	<b>Product</b>
+	<div id='product' style='margin-bottom:20px'></div>
+	<b>Scenario</b>
 	<div id='scenario'></div>
 
 </div>
 <script>
+
 	mapboxgl.accessToken = 'pk.eyJ1IjoicGV0ZXJxbGl1IiwiYSI6ImNrbmdoM2d0cDBjeXAydnBjcTFvcDV4YWIifQ._dh1WoYUQQxa8qzjNXEPRQ';
     var map = new mapboxgl.Map({
         container: 'map', // container id
-        style: 'mapbox://styles/peterqliu/ck2gsk41605p71coi7wf6dope', // style URL
+        style: 'mapbox://styles/peterqliu/cknqc55fk1sc417p9ijzp56ba', // style URL
         center: [-74.5, 40], // starting position [lng, lat]
         zoom: 4 // starting zoom
     });
 
+    var tooltip = new mapboxgl.Popup({ closeButton: false, closeOnClick:false })
+    	.addTo(map)
     var constants = {
     	toggles: ['product', 'scenario'],
     	products: ['Liquids', 'Gas'], 
@@ -52,15 +63,31 @@
     }
 
 
-    constants.toggles.forEach(item=> {
-	    d3.select(`#${item}`)
+    constants.toggles.forEach(category=> {
+    	const options = 
+	    d3.select(`#${category}`)
 	    	.selectAll('button')
-	    	.data(constants[item+'s'])
+	    	.data(constants[category+'s'])
 	    	.enter()
-	    	.append('button')
+	    	.append('span');
+
+	    options
+	    	.append('input')
+	    	.attr('type', 'radio')
+	    	.attr('id', d=>d)
+	    	.attr('name', category)
+	    	.attr('value', d=>d)
+	    	.attr('checked', (d,i)=>i===0 ? 'checked': undefined)
+	    	.on('click', d=> {
+	    		state[category] = d;
+	    		updateVis()
+	    	})
+	    options
+	    	.append('label')
+	    	.attr('for', d=>d)
 	    	.text(d=>d)
 	    	.on('click', d=> {
-	    		state[item] = d;
+	    		state[category] = d;
 	    		updateVis()
 	    	})
     })
@@ -78,50 +105,82 @@
 					]
 			}
 		)
-
 		.setLayoutProperty(
-			'extrusions',
-			'text-size', 
-			{
-				property: prop,
-				stops: [
-					[{zoom: 0, value:0}, 0],
-					[{zoom: 0, value:1}, 2*state.pitchRatio],
-					[{zoom: 12, value:0}, 0],
-					[{zoom: 12, value:1}, 200*state.pitchRatio]
-				]
-			}
+			'stat-label', 
+			'text-field', 
+			`foo`
 		)
+
+		tooltip.remove()
+		// .setLayoutProperty(
+		// 	'extrusions',
+		// 	'text-size', 
+		// 	{
+		// 		property: prop,
+		// 		stops: [
+		// 			[{zoom: 0, value:0}, 0],
+		// 			[{zoom: 0, value:1}, 2*state.pitchRatio],
+		// 			[{zoom: 12, value:0}, 0],
+		// 			[{zoom: 12, value:1}, 200*state.pitchRatio]
+		// 		]
+		// 	}
+		// )
     }
+
     map.on('load', ()=> {
+
     	d3.json('./data/boundGeoJSON.geojson', (e,r)=>{
-			data = r
-			map.addLayer({
-				id:'counties',
-				type: 'fill', 
-				source: {
-					type: 'geojson',
-					data: r
-				},
-				paint: {
-					'fill-color': 'green',
-					'fill-opacity': {
-						property: 'LiquidsSDS',
-						stops: [
-							[0,0],
-							[1,0.5]
-						]
-					}
-				}
-			}, 'water')
-			.addLayer({
-				id:'counties-outline',
-				type: 'line', 
-				source: 'counties',
-				paint: {
-					'line-color': 'green',
-				}
-			}, 'water')
+
+			data = r;
+
+			data.features.forEach((f,i)=>f.properties.id = i)
+			// map.addLayer({
+			// 	id:'counties',
+			// 	type: 'fill', 
+			// 	source: {
+			// 		type: 'geojson',
+			// 		data: r
+			// 	},
+			// 	paint: {
+			// 		'fill-color': 'navy',
+			// 		'fill-opacity': {
+			// 			property: 'LiquidsSDS',
+			// 			stops: [
+			// 				[0,0],
+			// 				[1,0.5]
+			// 			]
+			// 		}
+			// 	}
+			// }, 'water')
+			// .addLayer({
+			// 	id:'counties-outline',
+			// 	type: 'line', 
+			// 	source: 'counties',
+			// 	paint: {
+			// 		'line-color': 'white',
+			// 	}
+			// }, 'water')
+    	})
+
+    	map.on('click', (e)=>{
+    		const h = map.queryRenderedFeatures(e.point, {layers:['counties']});
+    		if (h[0]) {
+    			const polygon = data.features[h[0].properties.id]
+    			const props = h[0].properties;
+    			const stat = Math.round(props[state.product+state.scenario]*100)
+    			tooltip
+    				.setHTML(`${props.c} County, ${props.s}: ${stat}%`)
+    				.setLngLat(map.unproject(e.point))
+    				.addTo(map)
+    			// map.setPitch(60)
+
+    			// map.fitBounds(
+    			// 	getBounds(polygon), 
+    			// 	{duration:500, padding:100}
+    			// )
+
+    		}
+
     	})
 
     	d3.json('./data/points.geojson', (e,r)=>{
@@ -133,7 +192,8 @@
 					data: r
 				},
 				paint:{
-					'text-color':'blue'
+					'text-color':'blue',
+					'text-opacity':0
 				},
 				layout: {
                     'text-font':["Source Code Pro Medium","Arial Unicode MS Regular"],
@@ -154,21 +214,33 @@
 					}
 				}
 			})
-			.addLayer({
-				id:'circle', 
-				type: 'circle', 
-				source:'extrusions',
-				paint: {
-					'circle-radius': 4
-				}
-			}, 'extrusions')
-			.on('pitch', ()=> {
-				var ratio = map.getPitch()/60
-				state.pitchRatio = ratio;
-				updateVis();		
-			})
+			// .addLayer({
+			// 	id:'circle', 
+			// 	type: 'circle', 
+			// 	source:'extrusions',
+			// 	paint: {
+			// 		'circle-radius': 4,
+			// 		'circle-opacity':0
+			// 	}
+			// }, 'extrusions')
+			// .on('pitch', ()=> {
+			// 	var ratio = map.getPitch()/60
+			// 	state.pitchRatio = ratio;
+			// 	updateVis();		
+			// })
     	})
     })
+
+    const getBounds = polygon => {
+		const coords = polygon.geometry.coordinates[0];
+		var bounds = coords.reduce(
+			function (bounds, coord) {
+				return bounds.extend(coord);
+			}, 
+			new mapboxgl.LngLatBounds(coords[0], coords[0])
+		);
+		return bounds
+    }
 </script>
 
 </body>

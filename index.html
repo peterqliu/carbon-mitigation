@@ -7,10 +7,12 @@
 <link href="https://api.mapbox.com/mapbox-gl-js/v2.2.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v2.2.0/mapbox-gl.js"></script>
 <script src="https://d3js.org/d3.v4.min.js"></script>
+<link href="https://api.mapbox.com/mapbox-assembly/v1.0.1/assembly.min.css" rel="stylesheet">
 
 <style>
 	body { margin: 0; padding: 0; font-family:sans-serif;}
 	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
 	#modal {
 		position:absolute;
 		left: 0px;
@@ -19,228 +21,445 @@
 		padding:20px;
 		margin:10px;
 		border-radius:5px;
-		min-width:10vw;
+		min-width:300px;
+	}
+
+	#countyModal {
+		left:0;
+		top:0;
+		position:absolute;
+		z-index: 99;
+		width:100%;
 	}
 
 	label {
 		margin-right:10px;
 	}
+
+	.mapboxgl-popup * {
+		pointer-events: none;
+	}
+	
 	.mapboxgl-popup-content {
 		padding: 6px;
+	}
+
+	body[mode="county"] #modal,
+	#countyModal{
+		display:none;
+	}
+
+	body[mode="county"] #countyModal {
+		display:block;
+	}
+
+	canvas {
+		cursor:pointer;
+	}
+	.toggle-group {
+		background:#eee;
+		width:100%;
+	}
+
+	.toggle {
+		/*display:inline-block;*/
+		white-space: nowrap;
+	}
+
+	input:checked+.toggle {
+		background:#507fa1;
+	}
+	label {
+		margin:0;
 	}
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div id='modal'>
-	<b>Product</b>
-	<div id='product' style='margin-bottom:20px'></div>
-	<b>Scenario</b>
-	<div id='scenario'></div>
+	<div id='countyModal' class='px24 py24'>
+		<div id='county' style='float:right'>
+			<div id='statistic' style='text-align:right'></div>
+		</div>
+		<button 
+			onclick='state.view = "national"; updateVis("view"); tooltip.remove()' 
+			style='display:block; background:#507fa1; color:white; padding:5px'>
+			Back
+		</button>
+		<div class='txt-h1' id='countyLabel'></div>
+		<div class='txt-h3' id='stateLabel'></div>
+	</div>
+	<div id="map"></div>
+	<div id='modal'>
+		<div id='national'>
+			<div class='txt-h5'>Visualize</div>
+			<div id='visualize' class='toggle-group' style='margin-bottom:20px'>
+				
+			</div>
+			<div class='txt-h5'>Product</div>
+			<div id='product' class='toggle-group' style='margin-bottom:20px'>
+				
+			</div>
+			<div class='txt-h5'>Scenario</div>
+			<div id='scenario' class='toggle-group'></div>
+		</div>
 
-</div>
+	</div>
+
+<script src='https://unpkg.com/@turf/turf@6.3.0/turf.min.js'></script>
+
+<script src='map.js'></script>
 <script>
 
 	mapboxgl.accessToken = 'pk.eyJ1IjoicGV0ZXJxbGl1IiwiYSI6ImNrbmdoM2d0cDBjeXAydnBjcTFvcDV4YWIifQ._dh1WoYUQQxa8qzjNXEPRQ';
     var map = new mapboxgl.Map({
         container: 'map', // container id
-        style: 'mapbox://styles/peterqliu/cknqc55fk1sc417p9ijzp56ba', // style URL
-        center: [-74.5, 40], // starting position [lng, lat]
+        style: 'mapbox://styles/peterqliu/ckoox661f9qim17lj6qddz0yf', // style URL
+        center: [-100, 40], // starting position [lng, lat]
         zoom: 4 // starting zoom
     });
 
-    var tooltip = new mapboxgl.Popup({ closeButton: false, closeOnClick:false })
+    var tooltip = new mapboxgl.Popup({ closeButton: false, closeOnClick:false, anchor:'left' })
     	.addTo(map)
+
     var constants = {
-    	toggles: ['product', 'scenario'],
-    	products: ['Liquids', 'Gas'], 
-    	scenarios: ['SDS', 'SSP4', 'STPS']
+
+    	barGraphAngle: 20,
+    	graphColors: ['#7D6B7D', '#FF8C64', '#FFF4BD', '#FF665A'],
+    	toggles: ['product', 'scenario', 'visualize', 'statistic'],
+
+    	products: ['Oil', 'Gas'], 
+    	scenarios: ['SDS', 'SSP4', 'STPS'],
+    	visualizes: ['By %', '% and Volume'],
+    	layerModes: [
+    		'counties',
+    		'stranded-volume-circle',
+    		'stranded-volume'
+    	],
+    	circleRadiusCoefficient: {
+    		Oil: 1,
+    		Gas: 0.1
+    	},
+    	statistics: ['production', 'expenditure', 'tax'],
+    	countyStats: {
+    		production: 'Gross production',
+    		expenditure: 'Private expenditure reduction',
+    		tax: 'Tax revenue reduction'
+    	},
+    	decades: ['2020-29', '2030-39', '2040-49'],
+    	graphRows: ['baseline', 'STPS', 'SSP4', 'SDS']
+
     }
 
     var state = {
-    	product: 'Liquids',
-    	scenario: 'SDS'
+    	product: 'Oil',
+    	scenario: 'SDS',
+    	visualize: 'By %',
+    	statistic:'production',
+    	view: 'national'
     }
 
 
     constants.toggles.forEach(category=> {
-    	const options = 
-	    d3.select(`#${category}`)
-	    	.selectAll('button')
-	    	.data(constants[category+'s'])
-	    	.enter()
-	    	.append('span');
 
-	    options
-	    	.append('input')
-	    	.attr('type', 'radio')
-	    	.attr('id', d=>d)
-	    	.attr('name', category)
-	    	.attr('value', d=>d)
-	    	.attr('checked', (d,i)=>i===0 ? 'checked': undefined)
-	    	.on('click', d=> {
-	    		state[category] = d;
-	    		updateVis()
-	    	})
-	    options
-	    	.append('label')
-	    	.attr('for', d=>d)
-	    	.text(d=>d)
-	    	.on('click', d=> {
-	    		state[category] = d;
-	    		updateVis()
-	    	})
+    	const categoryOptions = constants[category+'s'];
+    	const options = 
+			d3.select(`#${category}`)
+				.selectAll('button')
+				.data(categoryOptions)
+				.enter()
+				.append('label')
+				.attr('class', 'toggle-container w-1/' +categoryOptions.length)
+				.on('click', d=> {
+					state[category] = d;
+					updateVis(category)
+				})
+
+			options
+				.append('input')
+				.attr('type', 'radio')
+				.attr('id', d=>d)
+				.attr('name', category)
+				.attr('value', d=>d)
+				.attr('class', 'toggle-1')
+				.attr('checked', (d,i)=>i===0 ? 'checked': undefined)
+
+
+			options
+				.append('div')
+				.attr('class', category ==='statistic' ? 'toggle txt-h3' : 'toggle')
+				.text(d=>constants.countyStats[d] || d)
+
     })
 
-    const updateVis = () => {
+    const updateVis = category => {
+
+    	// toggling view between national and county
+    	if (category === 'view') {
+
+    		d3.select('body')
+    			.attr('mode', state.view);
+
+    		const nationalView = state.view === 'national'
+    		var [s, c] = state.countyData.location.split('_');
+
+    		map
+    			.setFilter('counties', ['all', ['==', 's', s], ['==', 'c', c]])
+    			.setPaintProperty(
+    				'counties', 
+    				'fill-color', 
+    				nationalView ? 'white' : '#eff0f0' 
+    			)
+    			.setPaintProperty(
+    				'states-9kg7xn', 
+    				'fill-color', 
+    				nationalView ? '#eff0f0' : '#c2cdd6'
+    			)
+	    		.setLayoutProperty('stat-label', 'visibility', nationalView ? 'visible' : 'none')
+
+    		if (nationalView) {
+    			updateVis('visualize')
+    			map.easeTo({
+    				pitch:0, 
+    				zoom:4, 
+    				bearing:0,
+    				easing:t=>t
+    			});
+    			generateBarGeometry() // clear geometry
+    			updateBarGraphLayers(true)
+    		}
+
+    		else {
+	    		constants.layerModes
+	    			.forEach((l,i)=>map.setLayoutProperty(l, 'visibility', l ==='counties' ? 'visible' : 'none'))
+    			return
+    		}
+    	}
+
+    	// toggling stranded data vis scheme
+    	else if (category === 'visualize') {
+
+    		const index = constants.visualizes.indexOf(state.visualize);
+
+    		constants.layerModes
+    			.forEach((l,i)=>map.setLayoutProperty(l, 'visibility', i===index ? 'visible' : 'none'))
+    		map.easeTo({pitch: index === 2 ? 60 : 0})
+    		return
+    	}
+
+    	// toggling county stat to visualize (without changing county)
+    	else if (category === 'statistic') {
+    		updateBarGraphLayers();
+    		// map.setPaintProperty('counties', 'fill-opacity', 0)
+    		return
+    	}
+
+    	// toggling scenario and products
     	const prop = `${state.product}${state.scenario}`;
-		map.setPaintProperty(
+    	const onlyWithLoss = ['>', prop, 0.005];
+
+    	const colorRamp = [
+    		"interpolate",
+			["linear"],["get", prop],
+			0,"#ffd84d",
+			1,"#dd2727"
+		]
+		map
+		.setFilter(
 			'counties', 
-			'fill-opacity', 
-			{
-					property: prop,
-					stops: [
-						[0,0],
-						[1,1]
-					]
-			}
+			onlyWithLoss
+		)
+		.setPaintProperty(
+			'counties',
+			'fill-color',
+			colorRamp
+		)
+		.setFilter(
+			'stranded-volume-circle', 
+			onlyWithLoss
+		)
+		.setPaintProperty(
+			'stranded-volume-circle', 
+			'circle-radius', 
+			// ["get",`${prop}Vol`],
+			[
+				'interpolate', ['exponential', 2], ['zoom'],
+				4, ['*', ["sqrt",["get",`${prop}Vol`]], 1],
+				22, ['*', ["sqrt",["get",`${prop}Vol`]], 160000],
+			]
+			
+		)
+		.setPaintProperty(
+			'stranded-volume-circle',
+			'circle-color',
+			colorRamp
+		)
+		.setPaintProperty(
+			'stranded-volume-circle',
+			'circle-stroke-color',
+			colorRamp
 		)
 		.setLayoutProperty(
-			'stat-label', 
-			'text-field', 
-			`foo`
+			'stat-label',
+			'text-field',
+			["concat",
+				["get", 'c'], 
+				// ' ',
+				// prop+'Vol',
+				' ', 
+				["to-string",
+					["round",
+						["*",
+							["get", prop],100
+						]
+					]
+				],"% ",
+				// ["to-string",["get", `${prop}Vol`]],
+
+			]
+		)
+		.setFilter(
+			'stranded-volume', 
+			onlyWithLoss
+		)
+		.setPaintProperty(
+			'stranded-volume', 
+			'fill-extrusion-height',
+			[ 
+				"/", 
+				["*",["get",`${prop}Vol`],1000000],
+				100
+			]
+		)
+		.setPaintProperty(
+			'stranded-volume', 
+			'fill-extrusion-color',
+			colorRamp
 		)
 
-		tooltip.remove()
-		// .setLayoutProperty(
-		// 	'extrusions',
-		// 	'text-size', 
-		// 	{
-		// 		property: prop,
-		// 		stops: [
-		// 			[{zoom: 0, value:0}, 0],
-		// 			[{zoom: 0, value:1}, 2*state.pitchRatio],
-		// 			[{zoom: 12, value:0}, 0],
-		// 			[{zoom: 12, value:1}, 200*state.pitchRatio]
-		// 		]
-		// 	}
-		// )
+		console.log(prop)
+		// tooltip.remove()
+
     }
+    
+
 
     map.on('load', ()=> {
 
-    	d3.json('./data/boundGeoJSON.geojson', (e,r)=>{
+    	updateVis(); 
+    	updateVis('visualize');
+    	setupBarGraphLayers();
+		d3.json('data/countyData.json', (e,r) => {
 
-			data = r;
+			const countyData = processCountyData(r);
 
-			data.features.forEach((f,i)=>f.properties.id = i)
-			// map.addLayer({
-			// 	id:'counties',
-			// 	type: 'fill', 
-			// 	source: {
-			// 		type: 'geojson',
-			// 		data: r
-			// 	},
-			// 	paint: {
-			// 		'fill-color': 'navy',
-			// 		'fill-opacity': {
-			// 			property: 'LiquidsSDS',
-			// 			stops: [
-			// 				[0,0],
-			// 				[1,0.5]
-			// 			]
-			// 		}
-			// 	}
-			// }, 'water')
-			// .addLayer({
-			// 	id:'counties-outline',
-			// 	type: 'line', 
-			// 	source: 'counties',
-			// 	paint: {
-			// 		'line-color': 'white',
-			// 	}
-			// }, 'water')
-    	})
+			map.on('click', e => {
 
-    	map.on('click', (e)=>{
-    		const h = map.queryRenderedFeatures(e.point, {layers:['counties']});
-    		if (h[0]) {
-    			const polygon = data.features[h[0].properties.id]
-    			const props = h[0].properties;
-    			const stat = Math.round(props[state.product+state.scenario]*100)
-    			tooltip
-    				.setHTML(`${props.c} County, ${props.s}: ${stat}%`)
-    				.setLngLat(map.unproject(e.point))
-    				.addTo(map)
-    			// map.setPitch(60)
+				tooltip.remove();
 
-    			// map.fitBounds(
-    			// 	getBounds(polygon), 
-    			// 	{duration:500, padding:100}
-    			// )
+				const h = map.queryRenderedFeatures(e.point, {layers:['county-hittest']});
 
-    		}
+				if (h[0]) {
 
-    	})
+					const props = h[0].properties;
+					const pole = JSON.parse(props.pole).map(s=>parseFloat(s));
 
-    	d3.json('./data/points.geojson', (e,r)=>{
-			map.addLayer({
-				id:'extrusions',
-				type: 'symbol', 
-				source: {
-					type: 'geojson',
-					data: r
-				},
-				paint:{
-					'text-color':'blue',
-					'text-opacity':0
-				},
-				layout: {
-                    'text-font':["Source Code Pro Medium","Arial Unicode MS Regular"],
-                    'text-field':'|',
-                    // 'text-letter-spacing':-2,
-                    // 'text-rotate':90,
-                    'text-anchor':'bottom',
-                    // 'text-max-width':40,
-                    // 'text-justify':'left',
-                    'text-offset':[0, 0.1],
-                    'text-allow-overlap': true,
-                    'text-size':{
-						property: 'LiquidsSDS',
-						stops: [
-							[0,0],
-							[1,80]
-						]
-					}
+
+
+					map.easeTo({
+						center:[pole[0], pole[1]+0.05], 
+						duration:600, 
+						zoom: 11, 
+						pitch: 45,
+						easing:t=>t
+					});
+
+					d3.select('#countyLabel')
+						.text(countyAppend(props))
+
+					d3.select('#stateLabel')
+						.text(props.s)
+					const location = `${props.s}_${props.c}`;
+					state.countyData = countyData[location];
+					state.countyData.location = location;
+
+					const barGeometry = generateBarGeometry(
+						{lng:pole[0], lat:pole[1]}, 
+						0.03, 
+						state.countyData
+					);
+
+					state.view = 'county';
+					updateVis('view');
+
+					map.once('moveend', ()=> updateBarGraphLayers())
+				
+
+
+
+
+
 				}
+
 			})
-			// .addLayer({
-			// 	id:'circle', 
-			// 	type: 'circle', 
-			// 	source:'extrusions',
-			// 	paint: {
-			// 		'circle-radius': 4,
-			// 		'circle-opacity':0
-			// 	}
-			// }, 'extrusions')
-			// .on('pitch', ()=> {
-			// 	var ratio = map.getPitch()/60
-			// 	state.pitchRatio = ratio;
-			// 	updateVis();		
-			// })
-    	})
+		})
+    })
+    .on('mousemove', e => {
+
+    	if (state.view === 'county') {
+
+			const h = map.queryRenderedFeatures(e.point);
+			const bar = h.find(l=>l.layer.type ==='fill-extrusion');
+
+			if (!bar) {
+				tooltip.remove();
+				if (state.currentBarIndex>=0){
+					state.currentBarIndex = undefined;
+					updateBarGraphColors()
+				}
+				return
+			}
+
+			tooltip
+				.setLngLat(map.unproject(e.point));
+
+			const barIndex = bar.properties.bar;
+
+			// exit if same highlight as before
+			if (barIndex === state.currentBarIndex) return
+			tooltip
+				.addTo(map)
+
+			if (Math.abs(e.originalEvent.movementX)>20 ||Math.abs(e.originalEvent.movementY)>20 ) return
+			state.currentBarIndex = barIndex;
+
+			const scenario = constants.graphRows[Math.floor(barIndex/constants.graphRows.length)];
+			const decade = barIndex % constants.graphRows.length
+			const number = state.countyData[state.statistic][scenario][decade]
+			tooltip.setHTML(`<div class="txt-h5">${formatStatistic[state.statistic](number)}</div>`)
+
+			updateBarGraphColors(scenario, decade)
+    	}
+
+    	else {
+
+			const h = map.queryRenderedFeatures(e.point, {layers:['county-hittest']});
+
+			if (h[0]) {
+
+				const props = h[0].properties;
+				const stat = Math.round(props[state.product+state.scenario])
+				
+				tooltip
+					.setHTML(`${countyAppend(props)} ${props.s}`)
+					.setLngLat(map.unproject(e.point))
+					.addTo(map)   
+			}
+
+			else tooltip.remove()
+ 		
+    	}
     })
 
-    const getBounds = polygon => {
-		const coords = polygon.geometry.coordinates[0];
-		var bounds = coords.reduce(
-			function (bounds, coord) {
-				return bounds.extend(coord);
-			}, 
-			new mapboxgl.LngLatBounds(coords[0], coords[0])
-		);
-		return bounds
-    }
+
 </script>
 
 </body>

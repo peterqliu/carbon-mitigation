@@ -1,268 +1,282 @@
-const setupBarGraphLayers = () => {
+mapboxgl.accessToken = 'pk.eyJ1IjoicGV0ZXJxbGl1IiwiYSI6ImNrbmdoM2d0cDBjeXAydnBjcTFvcDV4YWIifQ._dh1WoYUQQxa8qzjNXEPRQ';
+var map = new mapboxgl.Map({
+    container: 'map', // container id
+    style: 'mapbox://styles/peterqliu/ckoox661f9qim17lj6qddz0yf', // style URL
+    center: [-100, 40], // starting position [lng, lat]
+    zoom: 4 // starting zoom
+});
 
-    const rows = constants.graphRows;
+var tooltip = new mapboxgl.Popup({ closeButton: false, closeOnClick:false, anchor:'left', offset:10 })
+    .addTo(map)
+    const updateVis = category => {
 
-    map.addSource('barGraph', {
-        type: 'geojson',
-        data:{
-            "type": "FeatureCollection",
-            "features": []
-        }
-    })
+        // toggling view between national and county
+        if (category === 'view') {
 
-    iterateBarLayers((r,i,t)=> {
-        map.addLayer({
-            id: r+t,
-            type: 'fill-extrusion', 
-            filter:['==', 'bar', i*rows.length + t],
-            source:'barGraph',
-            paint:{
-                'fill-extrusion-color': constants.graphColors[i],
-                'fill-extrusion-height':0,
-                'fill-extrusion-vertical-gradient': false,
-                'fill-extrusion-color-transition':{duration:100, delay:0}
-            }
-        })
-    })
+            d3.select('body')
+                .attr('mode', state.view);
 
+            const nationalView = state.view === 'national'
+            var [s, c] = state.countyData.location.split('_');
 
-    map.addLayer({
-        id:'graphLabels',
-        type:'symbol',
-        source: 'barGraph',
-        paint: {
-            'text-color': '#44647e'
-        },
-        layout: {
-            'text-field':'{text}',
-            'text-anchor':{
-                type: 'identity',
-                property:'align'
-            },
-            'text-rotate': constants.barGraphAngle,
-            'text-allow-overlap': true,
-            'text-rotation-alignment': 'map',
-            'text-pitch-alignment': 'map'
-        }
-    })
-}
-
-const countyAppend = props => props.s ==='Offshore' || props.s === 'Alaska' ? props.c : props.c + ' County,' 
-
-const iterateBarLayers = fn => {
-    const rows = constants.graphRows;
-
-    rows.forEach((row, rowIndex)=>{
-        for (var t = 0; t<3; t++) fn(row, rowIndex, t)
-    })
-}
-
-// change extrusion colors when highlighting
-// if no input params, restore to default
-const updateBarGraphColors = (scenario, decade) => {
-
-    iterateBarLayers((s, sI, t)=> {
-
-        const keepColor = s === scenario || !scenario;
-        const barVisible = state.countyData[state.statistic][s];
-
-        map.setPaintProperty(
-            s+t,
-            'fill-extrusion-color',
-            keepColor ? constants.graphColors[sI] : `#fff`
-        )
-        .setPaintProperty(
-            s+t,
-            'fill-extrusion-opacity',
-            barVisible ? (keepColor ? 1 : 0.5) : 0
-        )
-    })
-}
-// change extrusion heights/baseline visibility with new statistics
-const updateBarGraphLayers = clear => {
-
-    const data = state.countyData[state.statistic];
-    const maxValue = Math.max(
-        ...Object.entries(data)
-            .map(d=>Math.max(...d[1]))
-    ) || 1
-
-    Object.entries(data)
-        .forEach(([scenario, stats])=>{
-            stats.forEach((n, i)=>{
-                map.setPaintProperty(
-                    scenario+i, 
-                    'fill-extrusion-height', 
-                    clear ? 0 : n * 15000 / maxValue
+            map
+                .setFilter('counties', ['all', ['==', 's', 'none'], ['==', 'c', c]])
+                .setPaintProperty(
+                    'counties', 
+                    'fill-color', 
+                    nationalView ? 'white' : '#eff0f0' 
                 )
                 .setPaintProperty(
-                    scenario+i, 
-                    'fill-extrusion-opacity', 
-                    1
+                    'states-9kg7xn', 
+                    'fill-color', 
+                    nationalView ? '#eff0f0' : '#c2cdd6'
                 )
+                .setLayoutProperty('stat-label', 'visibility', nationalView ? 'visible' : 'none')
+
+            if (nationalView) {
+                updateVis('visualize')
+
+                generateBarGeometry() // clear geometry
+                updateBarGraphLayers(true)
+                map.easeTo({
+                    pitch:0, 
+                    zoom:4, 
+                    bearing:0,
+                    duration:200
+                });
+            }
+
+            else {
+                constants.layerModes
+                    .forEach((l,i)=>map.setLayoutProperty(l, 'visibility', l ==='counties' ? 'visible' : 'none'))
+                return
+            }
+        }
+
+        // toggling stranded data vis scheme
+        else if (category === 'visualize') {
+
+            const index = constants.visualizes.indexOf(state.visualize);
+
+            constants.layerModes
+                .forEach((l,i)=>map.setLayoutProperty(l, 'visibility', i===index ? 'visible' : 'none'))
+            map.easeTo({pitch: index === 2 ? 60 : 0})
+            return
+        }
+
+        // toggling county stat to visualize (without changing county)
+        else if (category === 'statistic') {
+            updateBarGraphLayers();
+            // map.setPaintProperty('counties', 'fill-opacity', 0)
+            return
+        }
+
+        // toggling scenario and products
+        const prop = `${state.product}${state.scenario}`;
+        const onlyWithLoss = ['>', prop, 0.005];
+
+        const colorRamp = [
+            "interpolate",
+            ["linear"],["get", prop],
+            0,"#ffd84d",
+            1,"#dd2727"
+        ]
+        map
+        .setFilter(
+            'counties', 
+            onlyWithLoss
+        )
+        .setPaintProperty(
+            'counties',
+            'fill-color',
+            colorRamp
+        )
+        .setFilter(
+            'stranded-volume-circle', 
+            onlyWithLoss
+        )
+        .setPaintProperty(
+            'stranded-volume-circle', 
+            'circle-radius', 
+            // ["get",`${prop}Vol`],
+            [
+                'interpolate', ['exponential', 2], ['zoom'],
+                4, ['*', ["sqrt",["get",`${prop}Vol`]], 1],
+                22, ['*', ["sqrt",["get",`${prop}Vol`]], 160000],
+            ]
+            
+        )
+        .setPaintProperty(
+            'stranded-volume-circle',
+            'circle-color',
+            colorRamp
+        )
+        .setPaintProperty(
+            'stranded-volume-circle',
+            'circle-stroke-color',
+            colorRamp
+        )
+        .setLayoutProperty(
+            'stat-label',
+            'text-field',
+            ["concat",
+                ["get", 'c'], 
+                // ' ',
+                // prop+'Vol',
+                ' ', 
+                ["to-string",
+                    ["round",
+                        ["*",
+                            ["get", prop],100
+                        ]
+                    ]
+                ],"% ",
+                // ["to-string",["get", `${prop}Vol`]],
+
+            ]
+        )
+        .setFilter(
+            'stranded-volume', 
+            onlyWithLoss
+        )
+        .setPaintProperty(
+            'stranded-volume', 
+            'fill-extrusion-height',
+            [ 
+                "/", 
+                ["*",["get",`${prop}Vol`],1000000],
+                100
+            ]
+        )
+        .setPaintProperty(
+            'stranded-volume', 
+            'fill-extrusion-color',
+            colorRamp
+        )
+
+        console.log(prop)
+        // tooltip.remove()
+
+    }
+
+
+    map.on('load', ()=> {
+
+        updateVis(); 
+        updateVis('visualize');
+        setupBarGraphLayers();
+
+        d3.json('data/countyData.json', (e,r) => {
+
+            const countyData = processCountyData(r);
+            map.on('click', e => {
+
+                tooltip.remove();
+
+                const h = map.queryRenderedFeatures(e.point, {layers:['county-hittest']});
+
+                if (h[0]) {
+
+                    const props = h[0].properties;
+                    const pole = JSON.parse(props.pole).map(s=>parseFloat(s));
+
+
+
+                    map.easeTo({
+                        // center:[pole[0], pole[1]+0.05], 
+                        duration:200, 
+                        zoom: 4, 
+                        pitch: 60,
+                        easing:t=>t
+                    });
+
+                    d3.select('#countyLabel')
+                        .text(countyAppend(props))
+
+                    d3.select('#stateLabel')
+                        .text(props.s)
+                    const location = `${props.s}_${props.c}`;
+                    state.countyData = countyData[location];
+                    state.countyData.location = location;
+
+                    const barGeometry = generateBarGeometry(
+                        map.getCenter(), 
+                        4, 
+                        state.countyData
+                    );
+
+                    state.view = 'county';
+                    updateVis('view');
+
+                    map.once('moveend', ()=> {
+                        updateBarGraphLayers(); 
+                        setTimeout(()=>updateMaxLabel(), 1); 
+                    })
+                
+
+
+
+
+
+                }
+
             })
         })
 
-    for (var t = 0; t<3; t++) map.setPaintProperty('baseline'+t, 'fill-extrusion-opacity', data.baseline ? 1 : 0 )
-    
-    map.setFilter('graphLabels', ['!=', 'text', data.baseline ? 'undefined' : 'baseline'])
-};
+        map.on('mousemove', e => {
 
-const processCountyData = r => {
+            if (state.view === 'county') {
 
-	var output = {}
+                const h = map.queryRenderedFeatures(e.point);
+                const bar = h.find(l=>l.layer.type ==='fill-extrusion' && l.layer.id !=='boundingWalls');
 
-	var countyStats = ['production', 'expenditure', 'tax'];
-	r.forEach(d => {
+                if (!bar || isNaN(bar.properties.bar)) {
+                    tooltip.remove();
+                    if (state.currentBarIndex>=0){
+                        state.currentBarIndex = undefined;
+                        updateBarGraphColors()
+                    }
+                    return
+                }
+                tooltip
+                    .setLngLat(map.unproject(e.point));
 
-    	var currentColumnIndex = 2;
+                const barIndex = bar.properties.bar;
 
-		var sds = [0, 1, 2];
-		var ssp4 = [3, 4, 5];
-		var stps = [6, 7, 8];
+                // exit if same highlight as before
+                if (barIndex === state.currentBarIndex) return
+                tooltip
+                    .addTo(map)
 
-		var countyEntry = {};
+                state.currentBarIndex = barIndex;
 
-		countyStats.forEach(s=>{
+                const scenario = constants.graphRows[Math.floor(barIndex/constants.graphRows.length)];
+                const decade = barIndex % constants.graphRows.length
+                const number = state.countyData[state.statistic][scenario][decade]
+                tooltip.setHTML(`<div class="txt-h5">${formatStatistic[state.statistic](number)}</div>`)
 
-			countyEntry[s] = {
-		    	SDS: sds.map(index =>d[index+ currentColumnIndex]),	
-		    	SSP4: ssp4.map(index =>d[index+ currentColumnIndex]),
-		    	STPS: stps.map(index =>d[index+ currentColumnIndex]),	
-		    }
+                updateBarGraphColors(scenario, decade)
+            }
 
-		    if (s === 'production') {
+            else {
 
-		    	var baseline = [9, 10, 11];
-		    	Object.assign(countyEntry.production,{
-		    		baseline: baseline.map(index =>d[index+ currentColumnIndex]),
-		    	})
+                const h = map.queryRenderedFeatures(e.point, {layers:['county-hittest']});
 
-		    	currentColumnIndex+=3
-		    }
+                if (h[0]) {
 
-		    currentColumnIndex+=3
+                    const props = h[0].properties;
+                    const stat = Math.round(props[state.product+state.scenario])
+                    
+                    tooltip
+                        .setHTML(`${countyAppend(props)} ${props.s}`)
+                        .setLngLat(map.unproject(e.point))
+                        .addTo(map)   
+                }
 
-		})
-
-		output[`${d[0]}_${d[1]}`] = countyEntry
-
-	})
-
-	return output
-}
-
-const generateBarGeometry = (center, barWidth, data) => {
-
-    var fc = {
-        "type": "FeatureCollection",
-        "features": []
-    }
-
-    if (data) {
-        const [rows, columns] = [4, 4];
-
-        const barHeight = barWidth/2;
-        const middle = [center.lng, center.lat]
-        center.lng -= barWidth * (columns-1);
-        center.lat += barHeight * rows/2;
-
-        for (var r = 0; r<rows; r++) {
-
-            const lat = center.lat - r * barHeight;
-
-            for (var c = 0; c<columns; c++) {
+                else tooltip.remove()
             
-                const lng = center.lng+c*barWidth*2;
-
-                const ring = [
-                    [lng, lat],
-                    [lng+barWidth, lat],
-                    [lng+barWidth, lat -barHeight],
-                    [lng, lat -barHeight],
-                    [lng, lat]
-                ]
-
-                const polygon = {
-                    "type": "Feature",
-                    "properties": {
-                        bar: r*rows + c
-                    },
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [ring]
-                    }
-                }
-
-                fc.features.push(polygon)
-
-                if (r === rows-1) {
-
-
-                    const pt = {
-                        "type": "Feature",
-                        "properties": {
-                            text: constants.decades[c],
-                            align: 'center'
-                        },
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [lng+barWidth/2, lat - barHeight*2]
-                        }
-                    }
-
-                    fc.features.push(pt)
-                }
             }
+        })  
 
-            // vertical labels (scenarios)
-            const lng = center.lng + (columns+1.75) * barWidth;
-            const pt = {
-                "type": "Feature",
-                "properties": {
-                    text: constants.graphRows[r],
-                    align: 'left'
-                },
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [lng-barWidth/2, lat- barHeight/2]
-                }
-            }
-
-            fc.features.push(pt)
-        }
-
-        turf.transformRotate(fc, constants.barGraphAngle, {
-            mutate:true, 
-            pivot:middle
-        })
-    }
-
-
-    map.getSource('barGraph')
-        .setData(fc)
-}
-
-const formatStatistic = {
-
-    order: n => {
-        if (n<1000000) return n/1000 + 'k'
-        else if (n<1000000000) return n/1000000 + ' million'
-        else return n/1000000000 + ' billion'
-    },
-    production: n => formatStatistic.order(n * 1000000)+' bbl/year',
-    expenditure: n => '$'+formatStatistic.order(n * 1000000)+'/year',
-    tax: n => '$'+formatStatistic.order(n * 1000000)+'/year'
-
-}
-
-const getBounds = polygon => {
-	const coords = polygon.geometry.coordinates[0];
-	var bounds = coords.reduce(
-		function (bounds, coord) {
-			return bounds.extend(coord);
-		}, 
-		new mapboxgl.LngLatBounds(coords[0], coords[0])
-	);
-	return bounds
-}
+    })
+  

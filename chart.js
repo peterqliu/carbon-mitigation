@@ -112,6 +112,7 @@ const updateBarGraphColors = (scenario, decade) => {
         )
     })
 }
+
 // change extrusion heights/baseline visibility with new statistics
 const updateBarGraphLayers = clear => {
 
@@ -329,7 +330,7 @@ const formatStatistic = {
         else return formatStatistic.conditionalDecimal(n/1000000000) + 'B'
     },
     conditionalDecimal: n => n % 1 ? n.toFixed(2) : Math.floor(n),
-    production: n => formatStatistic.order(n * 1000000)+' bbl/yr',
+    production: n => formatStatistic.order(n * 1000000)+' mmboe/yr',
     expenditure: n => '$'+formatStatistic.order(n * 1000000)+'/yr',
     tax: n => '$'+formatStatistic.order(n * 1000000)+'/yr',
     jobs: n => formatStatistic.order(n)+' jobs',

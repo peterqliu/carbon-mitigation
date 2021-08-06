@@ -14,14 +14,12 @@
 	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
 
 	#modal {
-		position:absolute;
-		left: 0px;
-		bottom: 0px;	
 		background:white;
 		padding:20px;
 		margin:10px;
 		border-radius:5px;
-		min-width:300px;
+		width:25vw;
+		min-width: 350px;
 	}
 
 	#countyModal {
@@ -75,6 +73,24 @@
 	label {
 		margin:0;
 	}
+
+	#colorRamp {
+		height:6px;
+		border-radius:3px;
+		background-image: linear-gradient(to right, #ffd84d , #dd2727);
+		opacity:0.75;
+	}
+
+	#scenario[level='County'] .toggle-container {
+		width:33%!important;
+	}
+
+	#scenario[level='County'] .toggle-container:last-child {
+		display:none;
+	}
+	#scenario[level='State'] .toggle-container {
+		width:25%!important;
+	}
 </style>
 </head>
 <body>
@@ -90,20 +106,31 @@
 		</button>
 		<div class='txt-h1' id='countyLabel'></div>
 		<div class='txt-h3' id='stateLabel'></div>
+		<div id='explainer' class='left bottom fixed px24 py24'>
+			Combined annual oil and gas production, in million barrels of oil equivalent per year.
+		</div>
 	</div>
 	<div id="map"></div>
-	<div id='modal'>
+	<div id='modal' class='absolute top px12 py12' style='margin-left: 50%; transform: translate(-50%);'>
+		<div class='prose'>
+			<small style='float:left' class='absolute'>1%</small>
+			<small style='float:right'>100%</small>
+			<small style='margin-left:50%; transform:translateX(-50%); text-align: center;' class='txt-nowrap inline-block'>Percentage Stranded</small>
+		</div>
+		<div id='colorRamp'></div>
+	</div>
+	<div id='modal' class='absolute bottom left'>
+
 		<div id='national'>
-			<div class='txt-h5'>Visualize</div>
-			<div id='visualize' class='toggle-group' style='margin-bottom:20px'>
-				
-			</div>
+			<div class='txt-h5'>Level</div>
+			<div id='level' class='toggle-group' style='margin-bottom:20px'></div>
+
 			<div class='txt-h5'>Product</div>
-			<div id='product' class='toggle-group' style='margin-bottom:20px'>
-				
-			</div>
+			<div id='product' class='toggle-group' style='margin-bottom:20px'></div>
+			<div class='txt-h5'>Visualize Loss</div>
+			<div id='visualize' class='toggle-group' style='margin-bottom:20px'></div>
 			<div class='txt-h5'>Scenario</div>
-			<div id='scenario' class='toggle-group'></div>
+			<div id='scenario' class='toggle-group' level='County'></div>
 		</div>
 
 	</div>
@@ -120,15 +147,17 @@
 
     	barGraphAngle: 30,
     	graphColors: ['#7D6B7D', '#FF665A', '#FFF4BD', '#FF8C64'],
-    	toggles: ['product', 'scenario', 'visualize', 'statistic'],
+    	toggles: ['level', 'product', 'scenario', 'visualize', 'statistic'],
 
+    	levels: ['County', 'State'],
     	products: ['Oil', 'Gas'], 
-    	scenarios: ['SDS', 'SSP4', 'STPS'],
+    	scenarios: ['SDS', 'SSP4', 'STPS', 'HighEV'],
     	visualizes: ['By %', '% and Volume'],
     	layerModes: [
-    		'counties',
-    		'stranded-volume-circle',
-    		'stranded-volume'
+    		['counties', 'counties-offshore'],
+    		['stranded-volume-circle'],
+    		['states'],
+    		['states-volume-circle']
     	],
     	circleRadiusCoefficient: {
     		Oil: 1,
@@ -141,6 +170,13 @@
     		tax: 'Tax revenue',
     		jobs: 'Jobs'
     	},
+
+    	explainers:{
+			production: "Combined annual oil and gas production, in million barrels of oil equivalent per year.",
+			expenditure: "Combined capital expenditure (capex) and operating expenses (opex) per year.",
+			tax: "Combined local, state, and federal tax revenue per year",
+			jobs: "Estimated jobs both directly and indirectly supported by oil and gas production per year. Note that all jobs directly or indirectly supported by private expenditures and tax revenue may not necessarily be located in the county."
+    	},
     	chart: {
     		altitude: 1500000
     	},
@@ -150,6 +186,7 @@
     }
 
     var state = {
+    	level: 'County',
     	product: 'Oil',
     	scenario: 'SDS',
     	visualize: 'By %',
@@ -162,16 +199,14 @@
 
     	const categoryOptions = constants[category+'s'];
     	const options = 
+
 			d3.select(`#${category}`)
 				.selectAll('button')
 				.data(categoryOptions)
 				.enter()
 				.append('label')
 				.attr('class', 'toggle-container w-1/' +categoryOptions.length)
-				.on('click', d=> {
-					state[category] = d;
-					updateVis(category)
-				})
+
 
 			options
 				.append('input')
@@ -181,7 +216,14 @@
 				.attr('value', d=>d)
 				.attr('class', 'toggle-1')
 				.attr('checked', (d,i)=>i===0 ? 'checked': undefined)
+				.on('click', d=> {
 
+					state[category] = d;
+					updateVis(category)
+
+					d3.select('#explainer')
+						.text(constants.explainers[d])
+				})
 
 			options
 				.append('div')

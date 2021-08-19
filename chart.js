@@ -1,6 +1,6 @@
 const setupBarGraphLayers = () => {
 
-    const rows = constants.graphRows;
+    const rows = constants.graphRows.State;
 
     map.addSource('barGraph', {
         type: 'geojson',
@@ -11,22 +11,45 @@ const setupBarGraphLayers = () => {
     })
 
     iterateBarLayers((r,i,t)=> {
+
         map.addLayer({
             id: r+t,
             type: 'fill-extrusion', 
             filter:['==', 'bar', i*rows.length + t],
             source:'barGraph',
             paint:{
+
                 'fill-extrusion-color': constants.graphColors[i],
                 'fill-extrusion-height': 0,
+                'fill-extrusion-opacity': 0,
                 'fill-extrusion-vertical-gradient': false,
-                'fill-extrusion-color-transition':{duration:100, delay:0}
+                'fill-extrusion-color-transition': {
+                    duration:100, 
+                    delay:0
+                }
+
             }
         })
+
     })
 
 
-    map.addLayer({
+    map
+    .addLayer({
+            id: 'boundingWalls',
+            type: 'fill-extrusion', 
+            filter:['==', 'wall', true],
+            source:'barGraph',
+            paint:{
+                'fill-extrusion-color': 'white',
+                'fill-extrusion-base': ['*', [ '-', ["get",`index`], 1], constants.chart.altitude/5],
+
+                'fill-extrusion-height': ['-',['*', ["get",`index`], constants.chart.altitude/5], constants.chart.altitude/200],
+                'fill-extrusion-opacity': 0.75,
+                'fill-extrusion-vertical-gradient': false            
+            }
+        })
+    .addLayer({
         id:'graphLabels',
         type:'symbol',
         source: 'barGraph',
@@ -42,24 +65,10 @@ const setupBarGraphLayers = () => {
             },
             // 'text-rotate': constants.barGraphAngle,
             'text-allow-overlap': true,
-            'text-rotation-alignment': 'viewport',
-            'text-pitch-alignment': 'viewport'
+            'text-rotation-alignment': 'map',
+            'text-pitch-alignment': 'map'
         }
     })
-    .addLayer({
-            id: 'boundingWalls',
-            type: 'fill-extrusion', 
-            filter:['==', 'wall', true],
-            source:'barGraph',
-            paint:{
-                'fill-extrusion-color': 'white',
-                'fill-extrusion-base': ['*', ["get",`index`], constants.chart.altitude/5],
-
-                'fill-extrusion-height': ['-',['*', ['+',["get",`index`],1], constants.chart.altitude/5], constants.chart.altitude/200],
-                'fill-extrusion-opacity':0.5,
-                'fill-extrusion-vertical-gradient': false            
-            }
-        })
     .addLayer({
         id: 'custom', 
         type: 'custom',
@@ -74,31 +83,35 @@ const setupBarGraphLayers = () => {
 }
 
 const updateMaxLabel = () => {
-    const ndc = applyMatrix4(state.maxLabelMercator, state.cameraMatrix);
-    d3.select('#mark')
 
-        .style('left', 50 + ndc.x*50+'vw')
-        .style('top', 50 - ndc.y*50+'vh')
+    const ndc = applyMatrix4(state.maxLabelMercator, state.cameraMatrix);
+
+    d3.select('#mark')
+        .style('left', 50 + ndc.x * 50 + 'vw')
+        .style('top', 50 - ndc.y * 50 + 'vh');
+
 }
 
-const countyAppend = props => props.s ==='Offshore' || props.s === 'Alaska' ? props.c : props.c + ' County,' 
+const countyAppend = props => props.s === 'Offshore' || props.s === 'Alaska' ? props.c : props.c + ' County, '
 
 const iterateBarLayers = fn => {
-    const rows = constants.graphRows;
+
+    const rows = constants.graphRows.State;
 
     rows.forEach((row, rowIndex)=>{
         for (var t = 0; t<3; t++) fn(row, rowIndex, t)
     })
+
 }
 
 // change extrusion colors when highlighting
 // if no input params, restore to default
 const updateBarGraphColors = (scenario, decade) => {
 
-    iterateBarLayers((s, sI, t)=> {
+    iterateBarLayers( (s, sI, t) => {
 
         const keepColor = s === scenario || !scenario;
-        const barVisible = state.countyData[state.statistic][s];
+        const barVisible = state.econData[state.level][state.currentLocation][state.statistic][s];
 
         map.setPaintProperty(
             s+t,
@@ -116,7 +129,8 @@ const updateBarGraphColors = (scenario, decade) => {
 // change extrusion heights/baseline visibility with new statistics
 const updateBarGraphLayers = clear => {
 
-    const data = state.countyData[state.statistic];
+    const data = state.econData[state.level][state.currentLocation][state.statistic];
+
     const maxValue = Math.max(
         ...Object.entries(data)
             .map(d=>Math.max(...d[1]))
@@ -124,19 +138,25 @@ const updateBarGraphLayers = clear => {
 
     const graphMax = formatStatistic.getMax(maxValue);
 
+
     Object.entries(data)
         .forEach(([scenario, stats])=>{
+
             stats.forEach((n, i)=>{
+
+                if (state.level === 'County') map.setPaintProperty('HighEV'+i, 'fill-extrusion-opacity', 0)
+
                 map.setPaintProperty(
                     scenario+i, 
                     'fill-extrusion-height', 
-                    clear ? 0 : constants.chart.altitude * n / graphMax
+                    clear ? 0 : 100 + constants.chart.altitude * n / graphMax
                 )
                 .setPaintProperty(
                     scenario+i, 
                     'fill-extrusion-opacity', 
-                    1
+                    data[scenario] ? 1 : 0
                 )
+                
             })
         })
 
@@ -182,6 +202,46 @@ const processCountyData = r => {
     return output
 }
 
+const processStateData = r => {
+
+    var output = {}
+
+    var countyStats = ['production', 'expenditure', 'tax', 'jobs'];
+    r.forEach(d => {
+
+        // first two columns are state and county
+        var currentColumnIndex = 1;
+
+        var sds = [0, 1, 2];
+        var highEV = [3, 4, 5];
+        var ssp4 = [6, 7, 8];
+        var stps = [9, 10, 11];
+        var baseline = [12, 13, 14];
+
+        var countyEntry = {};
+
+        countyStats.forEach(s=>{
+
+            countyEntry[s] = {
+                SDS: sds.map(index => d[ index + currentColumnIndex]), 
+                HighEV: highEV.map(index => d[ index + currentColumnIndex]),
+                SSP4: ssp4.map(index => d[ index + currentColumnIndex]),
+                STPS: stps.map(index => d[ index + currentColumnIndex]),   
+                baseline: baseline.map(index => d[ index + currentColumnIndex])
+            }
+
+            currentColumnIndex += 15
+
+        })
+
+        output[`${d[0]}_`] = countyEntry
+
+    })
+
+    return output
+}
+
+
 const generateBarGeometry = (center, barWidth, data) => {
 
     var fc = {
@@ -191,14 +251,25 @@ const generateBarGeometry = (center, barWidth, data) => {
 
     if (data) {
 
-        const [rows, columns] = [4, 4];
-        // center.lat-=12;
+        center.lat -= 10;
+        const [rows, columns] = [constants.graphRows.State.length, 3];
         const barHeight = barWidth/2;
         const middle = [center.lng, center.lat]
         center.lng -= barWidth * (columns-1);
         center.lat += barHeight * rows/2;
 
-        for (var w=0; w<5; w++) {
+        // wall corners
+        const west = center.lng - barWidth * 0.5;
+        const east = center.lng + barWidth * 5.5;
+
+        const wall = [
+            [east, center.lat],
+            [west, center.lat],
+            [west, center.lat - barHeight * (rows+0.5)]
+        ];
+
+        for (var w=1; w<6; w++) {
+
             const boundingWalls = {
                 "type": "Feature",
                 "properties": {
@@ -208,9 +279,9 @@ const generateBarGeometry = (center, barWidth, data) => {
                 "geometry": {
                     "type": "LineString",
                     "coordinates": [
-                        [center.lng + barWidth * 5.5, center.lat],
-                        [center.lng, center.lat],
-                        [center.lng, center.lat - barHeight * (rows+0.5)]
+                        [east, center.lat],
+                        [west, center.lat],
+                        [west, center.lat - barHeight * (rows+0.5)]
                     ]
                 }
             }
@@ -218,27 +289,43 @@ const generateBarGeometry = (center, barWidth, data) => {
             fc.features.push(boundingWalls)
         }
 
+        // floor
+        fc.features.push({
+            "type": "Feature",
+            "properties": {
+                wall: true,
+                index: 0
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [wall.concat([
+                    [east, center.lat - barHeight * (rows+0.5)],
+                    [east, center.lat]
+                ])]
+            }
+        })
 
+        // building bars
         for (var r = 0; r<rows; r++) {
 
-            const lat = center.lat - r * barHeight;
+            var lat = center.lat - barHeight * r;
+            if (state.level === 'County') lat -= barHeight
 
             for (var c = 0; c<columns; c++) {
-            
-                const lng = center.lng+c*barWidth*2;
 
+                const lng = center.lng + c * barWidth * 2;
                 const ring = [
                     [lng, lat],
                     [lng+barWidth, lat],
-                    [lng+barWidth, lat -barHeight],
-                    [lng, lat -barHeight],
+                    [lng+barWidth, lat - barHeight],
+                    [lng, lat - barHeight],
                     [lng, lat]
                 ]
 
                 const polygon = {
                     "type": "Feature",
                     "properties": {
-                        bar: r*rows + c
+                        bar: r * rows + c
                     },
                     "geometry": {
                         "type": "Polygon",
@@ -249,8 +336,7 @@ const generateBarGeometry = (center, barWidth, data) => {
                 fc.features.push(polygon)
 
                 // add text per column
-                if (r === rows-1) {
-
+                if (r === rows-1 ) {
 
                     const pt = {
                         "type": "Feature",
@@ -260,7 +346,7 @@ const generateBarGeometry = (center, barWidth, data) => {
                         },
                         "geometry": {
                             "type": "Point",
-                            "coordinates": [lng+barWidth/2, lat - barHeight*2]
+                            "coordinates": [lng+barWidth/2, lat - barHeight*(state.level === 'State' ? 3 : 2)]
                         }
                     }
 
@@ -268,10 +354,11 @@ const generateBarGeometry = (center, barWidth, data) => {
 
                     if (c === 0) {
                         state.maxLabelMercator = mapboxgl.MercatorCoordinate.fromLngLat(
-                            [lng, lat + barHeight/2],
-                            constants.chart.altitude
+                            [lng - barHeight/2 - 1, lat + barHeight/2],
+                            constants.chart.altitude+400000
                         );
 
+                        updateMaxLabel()
                     }
 
                 }
@@ -284,12 +371,12 @@ const generateBarGeometry = (center, barWidth, data) => {
             const pt = {
                 "type": "Feature",
                 "properties": {
-                    text: constants.graphRows[r],
+                    text: constants.graphRows[state.level][r],
                     align: 'left'
                 },
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [lng-barWidth/2, lat- barHeight/2]
+                    "coordinates": [lng+barWidth, lat- barHeight/2]
                 }
             }
 

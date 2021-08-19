@@ -16,19 +16,20 @@ var tooltip = new mapboxgl.Popup({
 
 const updateVis = category => {
 
+    // visualizing state vs county
     if (category === 'level') {
 
         const stateLevel = state.level === 'State';
         map
             .setLayoutProperty('stat-label', 'visibility', stateLevel ? 'none': 'visible')
-            .setLayoutProperty('counties-white-bg', 'visibility', stateLevel ? 'none': 'visible')
-            .setLayoutProperty('states-white-bg', 'visibility', stateLevel ? 'visible': 'none')
+            .setLayoutProperty('county-bg', 'visibility', stateLevel ? 'none': 'visible')
+            // .setLayoutProperty('state-bg', 'visibility', stateLevel ? 'visible': 'none')
         
         d3.select('#scenario')
             .attr('level', state.level)
 
             if (state.level === 'County' && state.scenario === 'HighEV'){
-                console.log('mark')
+
                 d3
                 .select('#scenario')
                 .attr('level', state.level)
@@ -47,18 +48,28 @@ const updateVis = category => {
         updateVis('visualize')
     }
 
-    // toggling view between national and county
+    // toggling view between zoomout and zoomin
     else if (category === 'view') {
 
         d3.select('body')
             .attr('mode', state.view);
 
         const nationalView = state.view === 'national'
-        var [s, c] = state.countyData.location.split('_');
+        var [s, c] = state.currentLocation.split('_');
         const visibility = nationalView ? 'visible' : 'none';
         map
             .setLayoutProperty(
-                'counties-white-bg', 
+                'county-bg', 
+                'visibility', 
+                visibility
+            )
+            .setLayoutProperty(
+                'state-bg', 
+                'visibility', 
+                visibility
+            )
+            .setLayoutProperty(
+                'counties-offshore', 
                 'visibility', 
                 visibility
             )
@@ -77,14 +88,9 @@ const updateVis = category => {
                 'visibility', 
                 visibility
             )
-            .setLayoutProperty(
-                'counties-offshore', 
-                'visibility', 
-                visibility
-            )
             .setPaintProperty(
-                'state-bg',
-                'fill-opacity',
+                'county-border',
+                'line-opacity',
                 nationalView ? 0.5 : 0
             )
 
@@ -96,10 +102,13 @@ const updateVis = category => {
             updateBarGraphLayers(true)
             map.easeTo({
                 pitch:0, 
-                zoom:4, 
+                zoom:3, 
                 bearing:0,
                 duration:200
             });
+
+            map.dragPan.enable();
+
         }
 
         else {
@@ -113,7 +122,7 @@ const updateVis = category => {
     else if (category === 'visualize') {
 
         const index = constants.visualizes.indexOf(state.visualize) + constants.levels.indexOf(state.level)*2;
-        console.log(index)
+
         constants.layerModes
             .forEach((l,i)=>l.forEach(layer =>map.setLayoutProperty(layer, 'visibility', i===index ? 'visible' : 'none')))
         // map.easeTo({pitch: index === 2 ? 60 : 0})
@@ -284,11 +293,13 @@ map.on('load', ()=> {
     d3.json('countyData.json', (e,r) => {
 
         const countyData = processCountyData(r);
+        state.econData.County = countyData;
+
         map.on('click', e => {
 
             tooltip.remove();
 
-            const h = map.queryRenderedFeatures(e.point, {layers:['counties-white-bg']});
+            const h = map.queryRenderedFeatures(e.point, {layers:[`${state.level.toLowerCase()}-bg`]});
 
             if (h[0]) {
 
@@ -296,26 +307,28 @@ map.on('load', ()=> {
                 const pole = JSON.parse(props.pole).map(s=>parseFloat(s));
 
                 map.easeTo({
-                    // center:[pole[0], pole[1]+0.05], 
+                    center: [-100, 40], 
                     duration:200, 
-                    zoom: 4, 
+                    zoom: 3.5, 
                     pitch: 60,
-                    easing:t=>t
+                    easing: t => t
                 });
 
+                map.dragPan.disable();
+
                 d3.select('#countyLabel')
-                    .text(countyAppend(props))
+                    .text(placeName(props))
 
                 d3.select('#stateLabel')
                     .text(props.s)
-                const location = `${props.s}_${props.c}`;
-                state.countyData = countyData[location];
-                state.countyData.location = location;
+
+                const location = `${props.s}_${props.c || ''}`;
+                state.currentLocation = location;
 
                 generateBarGeometry(
-                    map.getCenter(), 
+                    {lng: -100, lat:40},
                     4, 
-                    state.countyData
+                    state.econData[state.level][state.currentLocation]
                 );
 
                 state.view = 'county';
@@ -323,7 +336,7 @@ map.on('load', ()=> {
 
                 map.once('moveend', ()=> {
                     updateBarGraphLayers(); 
-                    setTimeout(()=>updateMaxLabel(), 1); 
+                    // setTimeout(()=>updateMaxLabel(), 1); 
                 })
 
             }
@@ -333,6 +346,7 @@ map.on('load', ()=> {
 
     map.on('mousemove', e => {
 
+        // if looking at bar graph
         if (state.view === 'county') {
 
             const h = map.queryRenderedFeatures(e.point);
@@ -359,26 +373,32 @@ map.on('load', ()=> {
 
             state.currentBarIndex = barIndex;
 
-            const scenario = constants.graphRows[Math.floor(barIndex/constants.graphRows.length)];
-            const decade = barIndex % constants.graphRows.length
-            const number = state.countyData[state.statistic][scenario][decade]
+            const scenario = constants.graphRows.State[Math.floor(barIndex/constants.graphRows.State.length)];
+            const decade = barIndex % constants.graphRows.State.length
+            const number = state.econData[state.level][state.currentLocation][state.statistic][scenario][decade]
             tooltip.setHTML(`<div class="txt-h5">${formatStatistic[state.statistic](number)}</div>`)
 
             updateBarGraphColors(scenario, decade)
         }
 
+        // if viewing map
         else {
+    
+            const targetLayer = `${state.level.toLowerCase()}-bg`
 
-            const h = map.queryRenderedFeatures(e.point, {layers:['counties-white-bg', 'states-white-bg']});
+            const h = map.queryRenderedFeatures(e.point, {layers:[targetLayer]});
 
             if (h[0]) {
 
                 const props = h[0].properties;
                 const stat = props[state.product+state.scenario]
-                const strandedStatement = Math.round(stat*100)+ '% stranded in '+ state.scenario;
+                
+                const strandedStatement = stat ? `${Math.round(stat*100)}% ${state.product.toLowerCase()} production stranded in ${state.scenario}`
+                : `${state.product} production unaffected under ${state.scenario}`
+
                 tooltip
-                    .setHTML(`<b>${state.level === 'County' ? countyAppend(props) : ''} ${props.s}</b>
-                        <br>${strandedStatement}<br>
+                    .setHTML(`<b>${placeName(props)}</b>
+                        <div>${strandedStatement}</div>
                         <i>Click to view economic projections</i>`)
                     .setLngLat(map.unproject(e.point))
                     .addTo(map)   
@@ -390,4 +410,11 @@ map.on('load', ()=> {
     })  
 
 })
+
+const placeName = props => {
+
+    if (state.level === 'State') return props.s
+
+    else return `${props.c} County, ${props.s}`
+}
   

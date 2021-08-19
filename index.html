@@ -10,6 +10,7 @@
 <link href="https://api.mapbox.com/mapbox-assembly/v1.0.1/assembly.min.css" rel="stylesheet">
 
 <style>
+
 	body { margin: 0; padding: 0; font-family:sans-serif;background:#c8d2da;}
 	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
 
@@ -20,6 +21,7 @@
 		border-radius:5px;
 		width:25vw;
 		min-width: 350px;
+		z-index: 100;
 	}
 
 	#countyModal {
@@ -34,8 +36,12 @@
 		margin-right:10px;
 	}
 
-	.mapboxgl-popup * {
+	#map:hover .mapboxgl-popup {
+		display:flex;
+	}
+	.mapboxgl-popup {
 		pointer-events: none;
+		display:none;
 	}
 	
 	.mapboxgl-popup-content {
@@ -62,8 +68,8 @@
 		width:100%;
 	}
 
-	.toggle {
-		/*display:inline-block;*/
+	#countyModal .toggle {
+		display:inline-block;
 		white-space: nowrap;
 	}
 
@@ -94,7 +100,7 @@
 </style>
 </head>
 <body>
-	<div id='mark' style='position:absolute; z-index: 99; color:#44647e; transform:translateX(-150%) translateY(-100%); font-size:1.25em'></div>
+	<div id='mark' style='position:absolute; z-index: 99; color:#44647e; transform:translateX(-150%) translateY(-100%); font-size:0.8em'></div>
 	<div id='countyModal' class='px24 py24'>
 		<div id='county' style='float:right'>
 			<div id='statistic' style='text-align:right'></div>
@@ -104,13 +110,14 @@
 			style='display:block; background:#507fa1; color:white; padding:5px'>
 			Back
 		</button>
-		<div class='txt-h1' id='countyLabel'></div>
-		<div class='txt-h3' id='stateLabel'></div>
-		<div id='explainer' class='left bottom fixed px24 py24'>
-			Combined annual oil and gas production, in million barrels of oil equivalent per year.
+		<div class='left bottom fixed px24 py24'>
+			<div class='txt-h1' id='countyLabel'></div>
+			<!-- <div class='txt-h3' id='stateLabel'></div> -->
+			<div id='explainer' class='' style='color:#507fa1'>
+				Combined annual oil and gas production, in million barrels of oil equivalent per year.
+			</div>
 		</div>
 	</div>
-	<div id="map"></div>
 	<div id='modal' class='absolute top px12 py12' style='margin-left: 50%; transform: translate(-50%);'>
 		<div class='prose'>
 			<small style='float:left' class='absolute'>1%</small>
@@ -134,6 +141,7 @@
 		</div>
 
 	</div>
+	<div id="map"></div>
 
 <script src='https://unpkg.com/@turf/turf@6.3.0/turf.min.js'></script>
 
@@ -146,7 +154,7 @@
     var constants = {
 
     	barGraphAngle: 30,
-    	graphColors: ['#7D6B7D', '#FF665A', '#FFF4BD', '#FF8C64'],
+    	graphColors: ['#FFF4BD', '#FF665A', '#7D6B7D', '#FF8C64', '#60abaa'],
     	toggles: ['level', 'product', 'scenario', 'visualize', 'statistic'],
 
     	levels: ['County', 'State'],
@@ -181,7 +189,11 @@
     		altitude: 1500000
     	},
     	decades: ['2020-29', '2030-39', '2040-49'],
-    	graphRows: ['baseline', 'STPS', 'SSP4', 'SDS']
+
+    	graphRows: {
+    		County: ['baseline', 'STPS', 'SSP4', 'SDS'],
+    		State: ['baseline', 'STPS', 'SSP4', 'SDS', 'HighEV']
+    	}
 
     }
 
@@ -191,9 +203,14 @@
     	scenario: 'SDS',
     	visualize: 'By %',
     	statistic:'production',
-    	view: 'national'
+    	view: 'national',
+
+   		econData:{}
     }
 
+    d3.json('stateData.json', (e,r)=>{
+    	state.econData.State = processStateData(r);
+    })
 
     constants.toggles.forEach(category=> {
 
@@ -222,12 +239,14 @@
 					updateVis(category)
 
 					d3.select('#explainer')
-						.text(constants.explainers[d])
+						.text(constants.explainers[state.statistic])
+
+					console.log(constants.explainers[state.statistic])
 				})
 
 			options
 				.append('div')
-				.attr('class', category ==='statistic' ? 'toggle txt-h3' : 'toggle')
+				.attr('class', category ==='statistic' ? 'toggle' : 'toggle')
 				.text(d=>constants.countyStats[d] || d)
 
     })

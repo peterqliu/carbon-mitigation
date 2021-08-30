@@ -1,7 +1,7 @@
 mapboxgl.accessToken = 'pk.eyJ1IjoicGV0ZXJxbGl1IiwiYSI6ImNrbmdoM2d0cDBjeXAydnBjcTFvcDV4YWIifQ._dh1WoYUQQxa8qzjNXEPRQ';
 var map = new mapboxgl.Map({
     container: 'map', // container id
-    style: 'mapbox://styles/peterqliu/ckqioet7944wh17la7jhd24pa/draft', // style URL
+    style: 'mapbox://styles/peterqliu/cksunnhipaemh17qsf5iwlrhx/draft', // style URL
     center: [-100, 40], // starting position [lng, lat]
     zoom: 4 // starting zoom
 });
@@ -18,83 +18,67 @@ const updateVis = category => {
 
     // visualizing state vs county
     if (category === 'level') {
-
+        console.log('level', state.level)
         const stateLevel = state.level === 'State';
         map
             .setLayoutProperty('stat-label', 'visibility', stateLevel ? 'none': 'visible')
             .setLayoutProperty('county-bg', 'visibility', stateLevel ? 'none': 'visible')
-            // .setLayoutProperty('state-bg', 'visibility', stateLevel ? 'visible': 'none')
-        
+            .setLayoutProperty('county-border', 'visibility', stateLevel ? 'none': 'visible')
+  
         d3.select('#scenario')
             .attr('level', state.level)
 
-            if (state.level === 'County' && state.scenario === 'HighEV'){
+        if (state.level === 'County' && state.scenario === 'HighEV'){
 
-                d3
-                .select('#scenario')
-                .attr('level', state.level)
+            d3
+            .select('#scenario')
+            .attr('level', state.level)
 
-                .selectAll('.toggle-container input')
-                .attr('checked', (d,i)=> {
-                    if (state.level === 'County' && state.scenario === 'HighEV') {
-                        state.scenario = 'SDS';
-                        return i === 0 ? 'checked' : null;
-                    }
+            .selectAll('.toggle-container input')
+            .attr('checked', (d,i)=> {
+                if (state.level === 'County' && state.scenario === 'HighEV') {
+                    state.scenario = 'SDS';
+                    return i === 0 ? 'checked' : null;
+                }
 
-                    // else return d === state.scenario ? 'checked' : null;
-                })
-            }
+                // else return d === state.scenario ? 'checked' : null;
+            })
+        }
 
         updateVis('visualize')
     }
 
-    // toggling view between zoomout and zoomin
+    // toggling view between map and graph
     else if (category === 'view') {
 
         d3.select('body')
             .attr('mode', state.view);
 
-        const nationalView = state.view === 'national'
-        var [s, c] = state.currentLocation.split('_');
-        const visibility = nationalView ? 'visible' : 'none';
+        const mapView = state.view === 'map'
+        const visibility = mapView ? 'visible' : 'none';
+        const countiesVisible = mapView && state.level === 'County' ? 'visible' : 'none';
+
+        // toggle map elements
         map
             .setLayoutProperty(
                 'county-bg', 
                 'visibility', 
-                visibility
+                countiesVisible
             )
             .setLayoutProperty(
                 'state-bg', 
                 'visibility', 
                 visibility
             )
-            .setLayoutProperty(
-                'counties-offshore', 
-                'visibility', 
-                visibility
-            )
-            .setLayoutProperty(
-                'counties-white-bg offshore', 
-                'visibility', 
-                visibility
-            )
+
             .setLayoutProperty(
                 'stat-label', 
                 'visibility', 
-                visibility
-            )
-            .setLayoutProperty(
-                'counties', 
-                'visibility', 
-                visibility
-            )
-            .setPaintProperty(
-                'county-border',
-                'line-opacity',
-                nationalView ? 0.5 : 0
+                countiesVisible
             )
 
-        if (nationalView) {
+
+        if (mapView) {
 
             updateVis('visualize')
 
@@ -104,7 +88,7 @@ const updateVis = category => {
                 pitch:0, 
                 zoom:3, 
                 bearing:0,
-                duration:200
+                duration:250
             });
 
             map.dragPan.enable();
@@ -135,7 +119,6 @@ const updateVis = category => {
         return
     }
 
-    else if (category === 'scenario') console.log(state.scenario)
     // toggling scenario and products
 
     const prop = `${state.product}${state.scenario}`;
@@ -143,7 +126,7 @@ const updateVis = category => {
     const colorRamp = [
         "interpolate",
         ["linear"],['get', prop],
-        0, '#eff0f0',
+        0, '#e5e6e6',
         0.001, "#ffd84d",
         1,"#dd2727"
     ]
@@ -299,10 +282,10 @@ map.on('load', ()=> {
 
             tooltip.remove();
 
-            const h = map.queryRenderedFeatures(e.point, {layers:[`${state.level.toLowerCase()}-bg`]});
+            const h = map.queryRenderedFeatures(e.point, {layers:[`${state.level.toLowerCase()}-bg`, 'counties-offshore', 'stranded-volume-circle']});
 
             if (h[0]) {
-
+                console.log(h[0])
                 const props = h[0].properties;
                 const pole = JSON.parse(props.pole).map(s=>parseFloat(s));
 
@@ -331,12 +314,12 @@ map.on('load', ()=> {
                     state.econData[state.level][state.currentLocation]
                 );
 
-                state.view = 'county';
+                state.view = 'graph';
                 updateVis('view');
 
                 map.once('moveend', ()=> {
                     updateBarGraphLayers(); 
-                    // setTimeout(()=>updateMaxLabel(), 1); 
+                    setTimeout(()=>updateMaxLabel(), 1); 
                 })
 
             }
@@ -347,17 +330,20 @@ map.on('load', ()=> {
     map.on('mousemove', e => {
 
         // if looking at bar graph
-        if (state.view === 'county') {
+        if (state.view === 'graph') {
 
             const h = map.queryRenderedFeatures(e.point);
             const bar = h.find(l=>l.layer.type ==='fill-extrusion' && l.layer.id !=='boundingWalls');
 
             if (!bar || isNaN(bar.properties.bar)) {
+
                 tooltip.remove();
+
                 if (state.currentBarIndex>=0){
                     state.currentBarIndex = undefined;
                     updateBarGraphColors()
                 }
+
                 return
             }
 
@@ -376,7 +362,11 @@ map.on('load', ()=> {
             const scenario = constants.graphRows.State[Math.floor(barIndex/constants.graphRows.State.length)];
             const decade = barIndex % constants.graphRows.State.length
             const number = state.econData[state.level][state.currentLocation][state.statistic][scenario][decade]
-            tooltip.setHTML(`<div class="txt-h5">${formatStatistic[state.statistic](number)}</div>`)
+            const context = `projected annually for ${constants.decades[decade]},<br> given <span class='color-gray-deep'>${scenario}</span> conditions`;
+            tooltip.setHTML(
+                `<div class="txt-h5" style='color:#44647e'>${formatStatistic[state.statistic](number)}</div>
+                <p class='quiet'>${context}</p>`
+                )
 
             updateBarGraphColors(scenario, decade)
         }
@@ -386,7 +376,7 @@ map.on('load', ()=> {
     
             const targetLayer = `${state.level.toLowerCase()}-bg`
 
-            const h = map.queryRenderedFeatures(e.point, {layers:[targetLayer]});
+            const h = map.queryRenderedFeatures(e.point, {layers:[targetLayer, 'counties-offshore', 'stranded-volume-circle']});
 
             if (h[0]) {
 
@@ -397,9 +387,10 @@ map.on('load', ()=> {
                 : `${state.product} production unaffected under ${state.scenario}`
 
                 tooltip
-                    .setHTML(`<b>${placeName(props)}</b>
-                        <div>${strandedStatement}</div>
-                        <i>Click to view economic projections</i>`)
+                    .setHTML(`<div class='txt-h5 txt-nowrap' style='color:#44647e'>${placeName(props)}</div>
+                        <p>${strandedStatement}<br>
+                        <i class='quiet'>Click for economic projections</i>
+                        </p>`)
                     .setLngLat(map.unproject(e.point))
                     .addTo(map)   
             }
@@ -415,6 +406,6 @@ const placeName = props => {
 
     if (state.level === 'State') return props.s
 
-    else return `${props.c} County, ${props.s}`
+    else return `${props.c}${props.s === 'Offshore' ? '': ' County'}, ${props.s}`
 }
   

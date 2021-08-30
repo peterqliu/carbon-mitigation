@@ -45,18 +45,20 @@
 	}
 	
 	.mapboxgl-popup-content {
-		padding: 6px;
+		pointer-events: none;
+		padding: 10px;
+		line-height: 1.25em;
 	}
 
-	body[mode="county"] #modal,
-	body[mode="national"] #mark,
+	body[mode="graph"] #modal,
+	body[mode="map"] #mark,
 
 	#countyModal{
 		display:none;
 	}
 
-	body[mode="county"] #countyModal,
-	body[mode="county"] #mark {
+	body[mode="graph"] #countyModal,
+	body[mode="graph"] #mark {
 		display:block;
 	}
 
@@ -97,16 +99,24 @@
 	#scenario[level='State'] .toggle-container {
 		width:25%!important;
 	}
+
+	.quiet {
+		color:#aaa;
+	}
+
+	p{
+		margin-top:5px
+	}
 </style>
 </head>
 <body>
-	<div id='mark' style='position:absolute; z-index: 99; color:#44647e; transform:translateX(-150%) translateY(-100%); font-size:0.8em'></div>
+	<div id='mark' style='position:absolute; z-index: 99; color:#44647e; transform:translateX(-100%) translateY(0%)'></div>
 	<div id='countyModal' class='px24 py24'>
 		<div id='county' style='float:right'>
 			<div id='statistic' style='text-align:right'></div>
 		</div>
 		<button 
-			onclick='state.view = "national"; updateVis("view"); tooltip.remove()' 
+			onclick='state.view = "map"; updateVis("view"); tooltip.remove()' 
 			style='display:block; background:#507fa1; color:white; padding:5px'>
 			Back
 		</button>
@@ -129,14 +139,14 @@
 	<div id='modal' class='absolute bottom left'>
 
 		<div id='national'>
-			<div class='txt-h5'>Level</div>
-			<div id='level' class='toggle-group' style='margin-bottom:20px'></div>
+			<div class='txt-h5 mb6'>Level</div>
+			<div id='level' class='toggle-group mb18'></div>
 
-			<div class='txt-h5'>Product</div>
-			<div id='product' class='toggle-group' style='margin-bottom:20px'></div>
-			<div class='txt-h5'>Visualize Loss</div>
-			<div id='visualize' class='toggle-group' style='margin-bottom:20px'></div>
-			<div class='txt-h5'>Scenario</div>
+			<div class='txt-h5 mb6'>Product</div>
+			<div id='product' class='toggle-group mb18'></div>
+			<div class='txt-h5 mb6'>Visualize</div>
+			<div id='visualize' class='toggle-group mb18'></div>
+			<div class='txt-h5 mb6'>Emissions scenario</div>
 			<div id='scenario' class='toggle-group' level='County'></div>
 		</div>
 
@@ -154,16 +164,22 @@
     var constants = {
 
     	barGraphAngle: 30,
-    	graphColors: ['#FFF4BD', '#FF665A', '#7D6B7D', '#FF8C64', '#60abaa'],
+    	colors: {
+    		baseline: '#fdfcdc',
+    		STPS: '#fed9b7',
+    		SSP4:'#f07167',
+    		HighEV: '#60abaa',
+    		SDS: '#0081a7'
+    	},
     	toggles: ['level', 'product', 'scenario', 'visualize', 'statistic'],
 
     	levels: ['County', 'State'],
     	products: ['Oil', 'Gas'], 
     	scenarios: ['SDS', 'SSP4', 'STPS', 'HighEV'],
-    	visualizes: ['By %', '% and Volume'],
+    	visualizes: ['% Stranded', '% and Volume'],
     	layerModes: [
-    		['counties', 'counties-offshore'],
-    		['stranded-volume-circle'],
+    		['counties', 'counties-offshore', 'stat-label'],
+    		['stranded-volume-circle', 'stat-label'],
     		['states'],
     		['states-volume-circle']
     	],
@@ -192,7 +208,7 @@
 
     	graphRows: {
     		County: ['baseline', 'STPS', 'SSP4', 'SDS'],
-    		State: ['baseline', 'STPS', 'SSP4', 'SDS', 'HighEV']
+    		State: ['baseline', 'STPS', 'SSP4', 'HighEV', 'SDS']
     	}
 
     }
@@ -201,9 +217,9 @@
     	level: 'County',
     	product: 'Oil',
     	scenario: 'SDS',
-    	visualize: 'By %',
+    	visualize: '% Stranded',
     	statistic:'production',
-    	view: 'national',
+    	view: 'map',
 
    		econData:{}
     }
@@ -241,7 +257,6 @@
 					d3.select('#explainer')
 						.text(constants.explainers[state.statistic])
 
-					console.log(constants.explainers[state.statistic])
 				})
 
 			options

@@ -11,15 +11,15 @@ const setupBarGraphLayers = () => {
     })
 
     iterateBarLayers((r,i,t)=> {
-
+        const scenario = constants.graphRows.State[i];
         map.addLayer({
-            id: r+t,
+            id: r+'-'+t,
             type: 'fill-extrusion', 
             filter:['==', 'bar', i*rows.length + t],
             source:'barGraph',
             paint:{
 
-                'fill-extrusion-color': constants.graphColors[i],
+                'fill-extrusion-color': constants.colors[scenario],
                 'fill-extrusion-height': 0,
                 'fill-extrusion-opacity': 0,
                 'fill-extrusion-vertical-gradient': false,
@@ -45,7 +45,7 @@ const setupBarGraphLayers = () => {
                 'fill-extrusion-base': ['*', [ '-', ["get",`index`], 1], constants.chart.altitude/5],
 
                 'fill-extrusion-height': ['-',['*', ["get",`index`], constants.chart.altitude/5], constants.chart.altitude/200],
-                'fill-extrusion-opacity': 0.75,
+                'fill-extrusion-opacity': 0.5,
                 'fill-extrusion-vertical-gradient': false            
             }
         })
@@ -63,7 +63,6 @@ const setupBarGraphLayers = () => {
                 type: 'identity',
                 property:'align'
             },
-            // 'text-rotate': constants.barGraphAngle,
             'text-allow-overlap': true,
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'map'
@@ -114,12 +113,12 @@ const updateBarGraphColors = (scenario, decade) => {
         const barVisible = state.econData[state.level][state.currentLocation][state.statistic][s];
 
         map.setPaintProperty(
-            s+t,
+            `${s}-${t}`,
             'fill-extrusion-color',
-            keepColor ? constants.graphColors[sI] : `#fff`
+            keepColor ? constants.colors[s] : `#fff`
         )
         .setPaintProperty(
-            s+t,
+            `${s}-${t}`,
             'fill-extrusion-opacity',
             barVisible ? (keepColor ? 1 : 0.75) : 0
         )
@@ -138,21 +137,20 @@ const updateBarGraphLayers = clear => {
 
     const graphMax = formatStatistic.getMax(maxValue);
 
-
     Object.entries(data)
         .forEach(([scenario, stats])=>{
 
             stats.forEach((n, i)=>{
 
-                if (state.level === 'County') map.setPaintProperty('HighEV'+i, 'fill-extrusion-opacity', 0)
+                if (state.level === 'County') map.setPaintProperty('HighEV-'+i, 'fill-extrusion-opacity', 0)
 
                 map.setPaintProperty(
-                    scenario+i, 
+                    `${scenario}-${i}`,
                     'fill-extrusion-height', 
                     clear ? 0 : 100 + constants.chart.altitude * n / graphMax
                 )
                 .setPaintProperty(
-                    scenario+i, 
+                    `${scenario}-${i}`,
                     'fill-extrusion-opacity', 
                     data[scenario] ? 1 : 0
                 )
@@ -308,8 +306,14 @@ const generateBarGeometry = (center, barWidth, data) => {
         // building bars
         for (var r = 0; r<rows; r++) {
 
+
             var lat = center.lat - barHeight * r;
-            if (state.level === 'County') lat -= barHeight
+            if (state.level === 'County') {
+                lat -= barHeight;
+
+                // scoot last row up (to take space of HighEV)
+                if (r === rows -1) lat += barHeight
+            }
 
             for (var c = 0; c<columns; c++) {
 
@@ -346,7 +350,7 @@ const generateBarGeometry = (center, barWidth, data) => {
                         },
                         "geometry": {
                             "type": "Point",
-                            "coordinates": [lng+barWidth/2, lat - barHeight*(state.level === 'State' ? 3 : 2)]
+                            "coordinates": [lng+barWidth/2, lat - barHeight*3]
                         }
                     }
 
@@ -354,7 +358,7 @@ const generateBarGeometry = (center, barWidth, data) => {
 
                     if (c === 0) {
                         state.maxLabelMercator = mapboxgl.MercatorCoordinate.fromLngLat(
-                            [lng - barHeight/2 - 1, lat + barHeight/2],
+                            [lng - barHeight*2, lat + barHeight],
                             constants.chart.altitude+400000
                         );
 
@@ -371,7 +375,7 @@ const generateBarGeometry = (center, barWidth, data) => {
             const pt = {
                 "type": "Feature",
                 "properties": {
-                    text: constants.graphRows[state.level][r],
+                    text: constants.graphRows.State[r].replace('HighEV', state.level === 'County' ? '': 'SDS + HighEV'),
                     align: 'left'
                 },
                 "geometry": {
@@ -413,19 +417,22 @@ const formatStatistic = {
     order: n => {
         if (n<=9999) return n
         else if (n<1000000) return formatStatistic.conditionalDecimal(n/1000) + 'k'
-        else if (n<1000000000) return formatStatistic.conditionalDecimal(n/1000000) + 'M'
-        else return formatStatistic.conditionalDecimal(n/1000000000) + 'B'
+        else if (n<1000000000) return formatStatistic.conditionalDecimal(n/1000000) + 'm'
+        else return formatStatistic.conditionalDecimal(n/1000000000) + 'bn'
     },
     conditionalDecimal: n => n % 1 ? n.toFixed(2) : Math.floor(n),
-    production: n => formatStatistic.order(n * 1000000)+' mmboe/yr',
-    expenditure: n => '$'+formatStatistic.order(n * 1000000)+'/yr',
-    tax: n => '$'+formatStatistic.order(n * 1000000)+'/yr',
+    production: n => formatStatistic.order(n)+' mmboe',
+    expenditure: n => '$'+formatStatistic.order(n * 1000000),
+    tax: n => '$'+formatStatistic.order(n * 1000000),
     jobs: n => formatStatistic.order(n)+' jobs',
+
+    // roundOutFloatingPoint: n => n%1 < 0.0001 ? Math.floor(n) : n,
     getMax: n => {
         const power = parseFloat(n.toExponential().split('e')[1]);
 
         const reduced = n/Math.pow(10,power);
-        if (reduced<1.25) return Math.ceil(reduced/0.1) * 0.1 * Math.pow(10, power)
+        if (reduced<1.25) return (Math.ceil(reduced * 10) * 0.1 * Math.pow(10, power)).toFixed(2)
+
         return (Math.ceil(reduced/0.5) * 0.5 * Math.pow(10, power)).toFixed(2)
 
     }

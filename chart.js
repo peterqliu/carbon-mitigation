@@ -375,7 +375,7 @@ const generateBarGeometry = (center, barWidth, data) => {
             const pt = {
                 "type": "Feature",
                 "properties": {
-                    text: constants.graphRows.State[r].replace('HighEV', state.level === 'County' ? '': 'SDS + HighEV'),
+                    text: constants.graphRows.State[r].replace('HighEV', state.level === 'County' ? '': 'HighEV'),
                     align: 'left'
                 },
                 "geometry": {

@@ -131,10 +131,10 @@ const updateVis = category => {
         1,"#dd2727"
     ]
     map
-    // .setFilter(
-    //     'counties', 
-    //     onlyWithLoss
-    // )
+    .setFilter(
+        'counties', 
+        onlyWithLoss
+    )
     .setPaintProperty(
         'counties',
         'fill-opacity',

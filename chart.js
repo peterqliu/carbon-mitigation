@@ -142,8 +142,6 @@ const updateBarGraphLayers = clear => {
 
             stats.forEach((n, i)=>{
 
-                // if (state.level === 'County') map.setPaintProperty('HighEV-'+i, 'fill-extrusion-opacity', 0)
-
                 map.setPaintProperty(
                     `${scenario}-${i}`,
                     'fill-extrusion-height', 
@@ -221,7 +219,6 @@ const processStateData = r => {
 
             countyEntry[s] = {
                 SDS: sds.map(index => d[ index + currentColumnIndex]), 
-                // HighEV: highEV.map(index => d[ index + currentColumnIndex]),
                 SSP4: ssp4.map(index => d[ index + currentColumnIndex]),
                 STPS: stps.map(index => d[ index + currentColumnIndex]),   
                 baseline: baseline.map(index => d[ index + currentColumnIndex])
@@ -307,12 +304,6 @@ const generateBarGeometry = (center, barWidth, data) => {
 
 
             var lat = center.lat - barHeight * r;
-            if (state.level === 'County') {
-                lat -= barHeight;
-
-                // scoot last row up (to take space of HighEV)
-                // if (r === rows -1) lat += barHeight
-            }
 
             for (var c = 0; c<columns; c++) {
 

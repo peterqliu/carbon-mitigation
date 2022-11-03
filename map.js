@@ -14,6 +14,8 @@ var tooltip = new mapboxgl.Popup({
 })
 .addTo(map);
 
+const trimmedStates = ['!in', 's', 'Arizona', 'Florida', 'Georgia', 'Idaho', 'Illinois', 'Indiana', 'Kentucky', 'Nebraska', 'Nevada', 'New York', 'Oregon', 'South Dakota', 'Tennessee'];
+
 const updateVis = category => {
 
     // visualizing state vs county
@@ -27,23 +29,6 @@ const updateVis = category => {
   
         d3.select('#scenario')
             .attr('level', state.level)
-
-        if (state.level === 'County' && state.scenario === 'HighEV'){
-
-            d3
-            .select('#scenario')
-            .attr('level', state.level)
-
-            .selectAll('.toggle-container input')
-            .attr('checked', (d,i)=> {
-                if (state.level === 'County' && state.scenario === 'HighEV') {
-                    state.scenario = 'SDS';
-                    return i === 0 ? 'checked' : null;
-                }
-
-                // else return d === state.scenario ? 'checked' : null;
-            })
-        }
 
         updateVis('visualize')
     }
@@ -147,7 +132,7 @@ const updateVis = category => {
     )    
 
     // update filters to show only areas with loss
-    .setFilter('states', onlyWithLoss)
+    .setFilter('states', onlyWithLoss.concat([trimmedStates]))
     .setFilter(
         'counties-offshore', 
         onlyWithLoss
@@ -272,6 +257,7 @@ map.on('load', ()=> {
     updateVis(); 
     updateVis('visualize');
     setupBarGraphLayers();
+    map.setFilter('state-bg', trimmedStates);
 
     d3.json('countyData.json', (e,r) => {
 

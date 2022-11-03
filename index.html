@@ -90,15 +90,8 @@
 		opacity:0.75;
 	}
 
-	#scenario[level='County'] .toggle-container {
+	#scenario.toggle-container {
 		width:33%!important;
-	}
-
-	#scenario[level='County'] .toggle-container:last-child {
-		display:none;
-	}
-	#scenario[level='State'] .toggle-container {
-		width:25%!important;
 	}
 
 	.quiet {
@@ -169,14 +162,13 @@
     		baseline: '#fdfcdc',
     		STPS: '#fed9b7',
     		SSP4:'#f07167',
-    		HighEV: '#60abaa',
     		SDS: '#0081a7'
     	},
     	toggles: ['level', 'product', 'scenario', 'visualize', 'statistic'],
 
     	levels: ['County', 'State'],
     	products: ['Oil', 'Gas'], 
-    	scenarios: ['SDS', 'SSP4', 'STPS', 'HighEV'],
+    	scenarios: ['SDS', 'SSP4', 'STPS'],
     	visualizes: ['% Stranded', '% and Volume'],
     	layerModes: [
     		['counties', 'counties-offshore', 'stat-label'],
@@ -209,7 +201,7 @@
 
     	graphRows: {
     		County: ['baseline', 'STPS', 'SSP4', 'SDS'],
-    		State: ['baseline', 'STPS', 'SSP4', 'HighEV', 'SDS']
+    		State: ['baseline', 'STPS', 'SSP4', 'SDS']
     	}
 
     }

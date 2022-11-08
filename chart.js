@@ -142,8 +142,6 @@ const updateBarGraphLayers = clear => {
 
             stats.forEach((n, i)=>{
 
-                if (state.level === 'County') map.setPaintProperty('HighEV-'+i, 'fill-extrusion-opacity', 0)
-
                 map.setPaintProperty(
                     `${scenario}-${i}`,
                     'fill-extrusion-height', 
@@ -211,10 +209,9 @@ const processStateData = r => {
         var currentColumnIndex = 1;
 
         var sds = [0, 1, 2];
-        var highEV = [3, 4, 5];
-        var ssp4 = [6, 7, 8];
-        var stps = [9, 10, 11];
-        var baseline = [12, 13, 14];
+        var ssp4 = [3, 4, 5];
+        var stps = [6, 7, 8];
+        var baseline = [9, 10, 11];
 
         var countyEntry = {};
 
@@ -222,13 +219,12 @@ const processStateData = r => {
 
             countyEntry[s] = {
                 SDS: sds.map(index => d[ index + currentColumnIndex]), 
-                HighEV: highEV.map(index => d[ index + currentColumnIndex]),
                 SSP4: ssp4.map(index => d[ index + currentColumnIndex]),
                 STPS: stps.map(index => d[ index + currentColumnIndex]),   
                 baseline: baseline.map(index => d[ index + currentColumnIndex])
             }
 
-            currentColumnIndex += 15
+            currentColumnIndex += 12
 
         })
 
@@ -308,12 +304,6 @@ const generateBarGeometry = (center, barWidth, data) => {
 
 
             var lat = center.lat - barHeight * r;
-            if (state.level === 'County') {
-                lat -= barHeight;
-
-                // scoot last row up (to take space of HighEV)
-                if (r === rows -1) lat += barHeight
-            }
 
             for (var c = 0; c<columns; c++) {
 

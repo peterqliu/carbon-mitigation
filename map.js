@@ -20,7 +20,7 @@ const updateVis = category => {
 
     // visualizing state vs county
     if (category === 'level') {
-        console.log('level', state.level)
+
         const stateLevel = state.level === 'State';
         map
             .setLayoutProperty('stat-label', 'visibility', stateLevel ? 'none': 'visible')
@@ -107,7 +107,6 @@ const updateVis = category => {
     // toggling scenario and products
 
     const prop = `${state.product}${state.scenario}`;
-    console.log(prop)
     const onlyWithLoss = ['all', ['has', prop]];
     const colorRamp = [
         "interpolate",
@@ -116,7 +115,7 @@ const updateVis = category => {
         0.001, "#ffd84d",
         1,"#dd2727"
     ]
-    console.log(colorRamp)
+
     map
     .setFilter(
         'counties', 
@@ -273,7 +272,7 @@ map.on('load', ()=> {
             const h = map.queryRenderedFeatures(e.point, {layers:[`${state.level.toLowerCase()}-bg`, 'counties-offshore', 'stranded-volume-circle']});
 
             if (h[0]) {
-                console.log(h[0])
+
                 const props = h[0].properties;
                 const pole = JSON.parse(props.pole).map(s=>parseFloat(s));
 

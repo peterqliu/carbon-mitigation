@@ -1,7 +1,7 @@
 mapboxgl.accessToken = 'pk.eyJ1IjoiYnJlYWt0aHJvdWdoLW1hcHMiLCJhIjoiY2t0MXhjcjh6MGZrdzJubzJpbXJ6ODczMiJ9.5rvh7Oj4MJOraoG2FcSrxw';
 var map = new mapboxgl.Map({
     container: 'map', // container id
-    style: 'mapbox://styles/peterqliu/cksunnhipaemh17qsf5iwlrhx/draft', // style URL
+    style: 'mapbox://styles/peterqliu/cla8sc3n9001d14n702jxjp6l', // style URL
     center: [-100, 40], // starting position [lng, lat]
     zoom: 4 // starting zoom
 });
@@ -107,6 +107,7 @@ const updateVis = category => {
     // toggling scenario and products
 
     const prop = `${state.product}${state.scenario}`;
+    console.log(prop)
     const onlyWithLoss = ['all', ['has', prop]];
     const colorRamp = [
         "interpolate",
@@ -115,6 +116,7 @@ const updateVis = category => {
         0.001, "#ffd84d",
         1,"#dd2727"
     ]
+    console.log(colorRamp)
     map
     .setFilter(
         'counties', 
@@ -125,14 +127,14 @@ const updateVis = category => {
         'fill-opacity',
         ['case', ['boolean', ['has', prop], true], 0.7, 0]
     )
-    .setPaintProperty(
-        'states',
-        'fill-opacity',
-        ['case', ['boolean', ['has', prop], true], 0.7, 0]
-    )    
+    // .setPaintProperty(
+    //     'states',
+    //     'fill-opacity',
+    //     ['case', ['boolean', ['has', prop], true], 0.7, 0]
+    // )    
 
-    // update filters to show only areas with loss
-    .setFilter('states', onlyWithLoss.concat([trimmedStates]))
+    // // update filters to show only areas with loss
+    // .setFilter('states', onlyWithLoss.concat([trimmedStates]))
     .setFilter(
         'counties-offshore', 
         onlyWithLoss
